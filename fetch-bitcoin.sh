@@ -11,4 +11,6 @@ grep $BITCOIN_TARBALL bitcoin.asc | tee SHA256SUMS.asc
 sha256sum -c SHA256SUMS.asc
 BD=bitcoin-$BITCOIN_VERSION/bin
 tar -xzvf $BITCOIN_TARBALL $BD/bitcoin-cli --strip-components=1
+ls -la
+ls -la bin/
 rm $BITCOIN_TARBALL
