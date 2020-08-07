@@ -18,7 +18,7 @@ WORKDIR /opt
 #    && chmod +x /opt/tini
 
 ARG BITCOIN_VERSION=0.20.1
-ENV BITCOIN_TARBALL bitcoin-${BITCOIN_VERSION}-${aarch64:-`uname -m`}-linux-gnu.tar.gz
+ENV BITCOIN_TARBALL bitcoin-0.20.1-`uname -m`-linux-gnu.tar.gz
 ENV BITCOIN_URL https://bitcoincore.org/bin/bitcoin-core-$BITCOIN_VERSION/$BITCOIN_TARBALL
 ENV BITCOIN_ASC_URL https://bitcoincore.org/bin/bitcoin-core-$BITCOIN_VERSION/SHA256SUMS.asc
 
