@@ -15,7 +15,7 @@ WORKDIR /opt
 
 COPY ./fetch-bitcoin.sh .
 RUN chmod 755 fetch-bitcoin.sh
-
+RUN ls -la
 RUN mkdir -p /opt/bitcoin && cd /opt/bitcoin 
 RUN ls -la
 RUN ./fetch-bitcoin.sh && ls -la /opt && ls -la /opt/bitcoin && ls -la /opt/bitcoin/bin
