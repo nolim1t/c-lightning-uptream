@@ -22,6 +22,11 @@ ENV BITCOIN_TARBALL bitcoin-0.20.1-`uname -m`-linux-gnu.tar.gz
 ENV BITCOIN_URL https://bitcoincore.org/bin/bitcoin-core-$BITCOIN_VERSION/$BITCOIN_TARBALL
 ENV BITCOIN_ASC_URL https://bitcoincore.org/bin/bitcoin-core-$BITCOIN_VERSION/SHA256SUMS.asc
 
+COPY ./fetch-bitcoin.sh ./fetch-bitcoin.sh
+
+RUN mkdir /opt/bitcoin && cd /opt/bitcoin \
+    ./fetch-bitcoin.sh
+
 RUN mkdir /opt/bitcoin && cd /opt/bitcoin \
     && wget -qO $BITCOIN_TARBALL "$BITCOIN_URL" \
     && wget -qO bitcoin.asc "$BITCOIN_ASC_URL" \
@@ -31,46 +36,24 @@ RUN mkdir /opt/bitcoin && cd /opt/bitcoin \
     && tar -xzvf $BITCOIN_TARBALL $BD/bitcoin-cli --strip-components=1 \
     && rm $BITCOIN_TARBALL
 
-ENV LITECOIN_VERSION 0.16.3
-ENV LITECOIN_PGP_KEY FE3348877809386C
-ENV LITECOIN_URL https://download.litecoin.org/litecoin-${LITECOIN_VERSION}/linux/litecoin-${LITECOIN_VERSION}-x86_64-linux-gnu.tar.gz
-ENV LITECOIN_ASC_URL https://download.litecoin.org/litecoin-${LITECOIN_VERSION}/linux/litecoin-${LITECOIN_VERSION}-linux-signatures.asc
-ENV LITECOIN_SHA256 686d99d1746528648c2c54a1363d046436fd172beadaceea80bdc93043805994
+#ENV LITECOIN_VERSION 0.16.3
+#ENV LITECOIN_PGP_KEY FE3348877809386C
+#ENV LITECOIN_URL https://download.litecoin.org/litecoin-${LITECOIN_VERSION}/linux/litecoin-${LITECOIN_VERSION}-x86_64-linux-gnu.tar.gz
+#ENV LITECOIN_ASC_URL https://download.litecoin.org/litecoin-${LITECOIN_VERSION}/linux/litecoin-${LITECOIN_VERSION}-linux-signatures.asc
+#ENV LITECOIN_SHA256 686d99d1746528648c2c54a1363d046436fd172beadaceea80bdc93043805994
 
 # install litecoin binaries
-RUN mkdir /opt/litecoin && cd /opt/litecoin \
-    && wget -qO litecoin.tar.gz "$LITECOIN_URL" \
-    && echo "$LITECOIN_SHA256  litecoin.tar.gz" | sha256sum -c - \
-    && BD=litecoin-$LITECOIN_VERSION/bin \
-    && tar -xzvf litecoin.tar.gz $BD/litecoin-cli --strip-components=1 --exclude=*-qt \
-    && rm litecoin.tar.gz
+#RUN mkdir /opt/litecoin && cd /opt/litecoin \
+#    && wget -qO litecoin.tar.gz "$LITECOIN_URL" \
+#    && echo "$LITECOIN_SHA256  litecoin.tar.gz" | sha256sum -c - \
+#    && BD=litecoin-$LITECOIN_VERSION/bin \
+#    && tar -xzvf litecoin.tar.gz $BD/litecoin-cli --strip-components=1 --exclude=*-qt \
+#    && rm litecoin.tar.gz
 
 FROM debian:stretch-slim as builder
 
 ENV LIGHTNINGD_VERSION=master
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates autoconf automake build-essential git libtool python3 python3-mako wget gnupg dirmngr git gettext libgmp-dev libsqlite3-dev net-tools zlib1g-dev unzip tclsh
-
-#RUN wget -q https://zlib.net/zlib-1.2.11.tar.gz \
-#&& tar xvf zlib-1.2.11.tar.gz \
-#&& cd zlib-1.2.11 \
-#&& ./configure \
-#&& make \
-#&& make install && cd .. && rm zlib-1.2.11.tar.gz && rm -rf zlib-1.2.11
-
-#RUN apt-get install -y --no-install-recommends unzip tclsh \
-#&& wget -q https://www.sqlite.org/2018/sqlite-src-3260000.zip \
-#&& unzip sqlite-src-3260000.zip \
-#&& cd sqlite-src-3260000 \
-#&& ./configure --enable-static --disable-readline --disable-threadsafe --disable-load-extension \
-#&& make \
-#&& make install && cd .. && rm sqlite-src-3260000.zip && rm -rf sqlite-src-3260000
-
-#RUN wget -q https://gmplib.org/download/gmp/gmp-6.1.2.tar.xz \
-#&& tar xvf gmp-6.1.2.tar.xz \
-#&& cd gmp-6.1.2 \
-#&& ./configure --disable-assembly \
-#&& make \
-#&& make install && cd .. && rm gmp-6.1.2.tar.xz && rm -rf gmp-6.1.2
 
 WORKDIR /opt/lightningd
 COPY . /tmp/lightning
@@ -95,8 +78,9 @@ RUN mkdir $LIGHTNINGD_DATA && \
 VOLUME [ "/root/.lightning" ]
 COPY --from=builder /tmp/lightning_install/ /usr/local/
 COPY --from=downloader /opt/bitcoin/bin /usr/bin
-COPY --from=downloader /opt/litecoin/bin /usr/bin
+#COPY --from=downloader /opt/litecoin/bin /usr/bin
 COPY tools/docker-entrypoint.sh entrypoint.sh
 
-EXPOSE 9735 9835
+EXPOSE 9735 9736 9835 9836 19735 19736 19835 19836
+
 ENTRYPOINT  [ "./entrypoint.sh" ]
