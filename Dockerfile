@@ -13,9 +13,9 @@ RUN set -ex \
 
 WORKDIR /opt
 
-RUN wget -qO /opt/tini "https://github.com/krallin/tini/releases/download/v0.18.0/tini" \
-    && echo "12d20136605531b09a2c2dac02ccee85e1b874eb322ef6baf7561cd93f93c855 /opt/tini" | sha256sum -c - \
-    && chmod +x /opt/tini
+#RUN wget -qO /opt/tini "https://github.com/krallin/tini/releases/download/v0.18.0/tini" \
+#    && echo "12d20136605531b09a2c2dac02ccee85e1b874eb322ef6baf7561cd93f93c855 /opt/tini" | sha256sum -c - \
+#    && chmod +x /opt/tini
 
 ARG BITCOIN_VERSION=0.18.1
 ENV BITCOIN_TARBALL bitcoin-${BITCOIN_VERSION}-x86_64-linux-gnu.tar.gz
@@ -81,7 +81,7 @@ ARG DEVELOPER=0
 RUN ./configure --prefix=/tmp/lightning_install --enable-static && make -j3 DEVELOPER=${DEVELOPER} && make install
 
 FROM debian:stretch-slim as final
-COPY --from=downloader /opt/tini /usr/bin/tini
+#COPY --from=downloader /opt/tini /usr/bin/tini
 RUN apt-get update && apt-get install -y --no-install-recommends socat inotify-tools python3 python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
@@ -99,4 +99,4 @@ COPY --from=downloader /opt/litecoin/bin /usr/bin
 COPY tools/docker-entrypoint.sh entrypoint.sh
 
 EXPOSE 9735 9835
-ENTRYPOINT  [ "/usr/bin/tini", "-g", "--", "./entrypoint.sh" ]
+ENTRYPOINT  [ "./entrypoint.sh" ]
