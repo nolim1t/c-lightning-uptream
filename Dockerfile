@@ -13,16 +13,7 @@ RUN set -ex \
 
 WORKDIR /opt
 
-#RUN wget -qO /opt/tini "https://github.com/krallin/tini/releases/download/v0.18.0/tini" \
-#    && echo "12d20136605531b09a2c2dac02ccee85e1b874eb322ef6baf7561cd93f93c855 /opt/tini" | sha256sum -c - \
-#    && chmod +x /opt/tini
-
-ARG BITCOIN_VERSION=0.20.1
-ENV BITCOIN_TARBALL bitcoin-0.20.1-`uname -m`-linux-gnu.tar.gz
-ENV BITCOIN_URL https://bitcoincore.org/bin/bitcoin-core-$BITCOIN_VERSION/$BITCOIN_TARBALL
-ENV BITCOIN_ASC_URL https://bitcoincore.org/bin/bitcoin-core-$BITCOIN_VERSION/SHA256SUMS.asc
-
-COPY ./fetch-bitcoin.sh ./fetch-bitcoin.sh
+COPY ./fetch-bitcoin.sh .
 
 RUN mkdir -p /opt/bitcoin && cd /opt/bitcoin &&
     ./fetch-bitcoin.sh && ls -la /opt && ls -la /opt/bitcoin && ls -la /opt/bitcoin/bin
