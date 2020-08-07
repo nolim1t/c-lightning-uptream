@@ -25,7 +25,7 @@ ENV BITCOIN_ASC_URL https://bitcoincore.org/bin/bitcoin-core-$BITCOIN_VERSION/SH
 COPY ./fetch-bitcoin.sh ./fetch-bitcoin.sh
 
 RUN mkdir -p /opt/bitcoin && cd /opt/bitcoin \
-    ./fetch-bitcoin.sh
+    ./fetch-bitcoin.sh && ls -la /opt/bitcoin && ls -la /opt/bitcoin/bin
 
 #RUN mkdir /opt/bitcoin && cd /opt/bitcoin \
 #    && wget -qO $BITCOIN_TARBALL "$BITCOIN_URL" \
