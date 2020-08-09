@@ -15,10 +15,15 @@ WORKDIR /opt
 
 COPY ./fetch-bitcoin.sh .
 RUN chmod 755 fetch-bitcoin.sh
+RUN echo "Current directory before everything"
+RUN pwd
 RUN ls -la
 RUN mkdir -p /opt/bitcoin && cd /opt/bitcoin 
+RUN echo "Current directory after cd"
+RUN pwd
 RUN ls -la
 RUN ./fetch-bitcoin.sh
+RUN echo "After run fetch-bitcoin"
 RUN ls -la
 RUN pwd
 
