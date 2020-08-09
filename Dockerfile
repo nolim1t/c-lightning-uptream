@@ -26,6 +26,8 @@ RUN ./fetch-bitcoin.sh
 RUN echo "After run fetch-bitcoin"
 RUN ls -la
 RUN pwd
+RUN ls -la ./bitcoin
+RUN ls -la ./bin
 
 #RUN mkdir /opt/bitcoin && cd /opt/bitcoin \
 #    && wget -qO $BITCOIN_TARBALL "$BITCOIN_URL" \
