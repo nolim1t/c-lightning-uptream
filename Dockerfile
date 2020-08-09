@@ -78,7 +78,7 @@ RUN mkdir $LIGHTNINGD_DATA && \
     touch $LIGHTNINGD_DATA/config
 VOLUME [ "/root/.lightning" ]
 COPY --from=builder /tmp/lightning_install/ /usr/local/
-COPY --from=downloader /opt/bitcoin/bin /usr/bin
+COPY --from=downloader /opt/bin /usr/bin
 #COPY --from=downloader /opt/litecoin/bin /usr/bin
 COPY tools/docker-entrypoint.sh entrypoint.sh
 
