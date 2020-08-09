@@ -1,9 +1,5 @@
 FROM debian:stretch-slim as downloader
 
-ARG USER=lnuser
-ARG UID=1000
-ARG DIR=/data
-
 RUN set -ex \
 	&& apt-get update \
 	&& apt-get install -qq --no-install-recommends ca-certificates dirmngr wget
@@ -51,8 +47,8 @@ COPY --from=builder /tmp/lightning_install/ /usr/local/
 COPY --from=downloader /opt/bin /usr/bin
 COPY tools/docker-entrypoint.sh entrypoint.sh
 
-RUN /usr/sbin/adduser --disabled-password --home "$DIR/" --gecos "" "$USER"
-USER $USER
+RUN /usr/sbin/adduser --disabled-password --home "/data/" --gecos "" "lightning"
+USER lighting
 
 ENV LIGHTNINGD_DATA=/data/.lightning
 ENV LIGHTNINGD_RPC_PORT=9835
