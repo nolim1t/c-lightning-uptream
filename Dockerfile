@@ -7,6 +7,9 @@
 # From the root of the repository, run "docker build -t yourimage:yourtag ."
 FROM debian:stretch-slim as downloader
 
+ARG USER=lightning
+ARG UID=1000
+
 RUN set -ex \
 	&& apt-get update \
 	&& apt-get install -qq --no-install-recommends ca-certificates dirmngr wget
@@ -81,6 +84,13 @@ COPY --from=builder /tmp/lightning_install/ /usr/local/
 COPY --from=downloader /opt/bin /usr/bin
 #COPY --from=downloader /opt/litecoin/bin /usr/bin
 COPY tools/docker-entrypoint.sh entrypoint.sh
+
+# NOTE: Default GID == UID == 1000
+RUN adduser --disabled-password \
+            --home "$DIR/" \
+            --gecos "" \
+            "$USER"
+USER $USER
 
 EXPOSE 9735 9736 9835 9836 19735 19736 19835 19836
 
