@@ -51,7 +51,7 @@ COPY --from=builder /tmp/lightning_install/ /usr/local/
 COPY --from=downloader /opt/bin /usr/bin
 COPY tools/docker-entrypoint.sh entrypoint.sh
 
-RUN adduser --disabled-password \
+RUN /usr/sbin/adduser --disabled-password \
             --home "$DIR/" \
             --gecos "" \
             "$USER"
@@ -63,9 +63,9 @@ ENV LIGHTNINGD_PORT=9735
 ENV LIGHTNINGD_NETWORK=bitcoin
 
 # Setup home directory
-RUN mkdir $LIGHTNINGD_DATA && \
-    touch $LIGHTNINGD_DATA/config
-VOLUME [ "/data/.lightning" ]
+#RUN mkdir $LIGHTNINGD_DATA && \
+#    touch $LIGHTNINGD_DATA/config
+#VOLUME [ "/data/.lightning" ]
 
 EXPOSE 9735 9736 9835 9836 19735 19736 19835 19836
 
