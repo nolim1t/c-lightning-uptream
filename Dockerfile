@@ -9,6 +9,7 @@ FROM debian:stretch-slim as downloader
 
 ARG USER=lightning
 ARG UID=1000
+ARG DIR=/data
 
 RUN set -ex \
 	&& apt-get update \
@@ -72,17 +73,9 @@ FROM debian:stretch-slim as final
 RUN apt-get update && apt-get install -y --no-install-recommends socat inotify-tools python3 python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
-ENV LIGHTNINGD_DATA=/root/.lightning
-ENV LIGHTNINGD_RPC_PORT=9835
-ENV LIGHTNINGD_PORT=9735
-ENV LIGHTNINGD_NETWORK=bitcoin
 
-RUN mkdir $LIGHTNINGD_DATA && \
-    touch $LIGHTNINGD_DATA/config
-VOLUME [ "/root/.lightning" ]
 COPY --from=builder /tmp/lightning_install/ /usr/local/
 COPY --from=downloader /opt/bin /usr/bin
-#COPY --from=downloader /opt/litecoin/bin /usr/bin
 COPY tools/docker-entrypoint.sh entrypoint.sh
 
 # NOTE: Default GID == UID == 1000
@@ -91,6 +84,15 @@ RUN adduser --disabled-password \
             --gecos "" \
             "$USER"
 USER $USER
+
+ENV LIGHTNINGD_DATA=/data/.lightning
+ENV LIGHTNINGD_RPC_PORT=9835
+ENV LIGHTNINGD_PORT=9735
+ENV LIGHTNINGD_NETWORK=bitcoin
+
+RUN mkdir $LIGHTNINGD_DATA && \
+    touch $LIGHTNINGD_DATA/config
+VOLUME [ "/data/.lightning" ]
 
 EXPOSE 9735 9736 9835 9836 19735 19736 19835 19836
 
