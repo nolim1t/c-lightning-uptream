@@ -18,7 +18,9 @@ RUN chmod 755 fetch-bitcoin.sh
 RUN ls -la
 RUN mkdir -p /opt/bitcoin && cd /opt/bitcoin 
 RUN ls -la
-RUN ./fetch-bitcoin.sh && ls -la /opt && ls -la /opt/bitcoin && ls -la /opt/bitcoin/bin
+RUN ./fetch-bitcoin.sh
+RUN ls -la
+RUN pwd
 
 #RUN mkdir /opt/bitcoin && cd /opt/bitcoin \
 #    && wget -qO $BITCOIN_TARBALL "$BITCOIN_URL" \
