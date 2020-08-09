@@ -53,6 +53,7 @@ COPY tools/docker-entrypoint.sh entrypoint.sh
 
 RUN adduser --disabled-password \
             --home "$DIR/" \
+            --gecos "" \
             "$USER"
 USER $USER
 
@@ -61,6 +62,7 @@ ENV LIGHTNINGD_RPC_PORT=9835
 ENV LIGHTNINGD_PORT=9735
 ENV LIGHTNINGD_NETWORK=bitcoin
 
+# Setup home directory
 RUN mkdir $LIGHTNINGD_DATA && \
     touch $LIGHTNINGD_DATA/config
 VOLUME [ "/data/.lightning" ]
