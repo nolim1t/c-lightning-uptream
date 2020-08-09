@@ -7,7 +7,7 @@
 # From the root of the repository, run "docker build -t yourimage:yourtag ."
 FROM debian:stretch-slim as downloader
 
-ARG USER=lightning
+ARG USER=lnuser
 ARG UID=1000
 ARG DIR=/data
 
@@ -78,10 +78,8 @@ COPY --from=builder /tmp/lightning_install/ /usr/local/
 COPY --from=downloader /opt/bin /usr/bin
 COPY tools/docker-entrypoint.sh entrypoint.sh
 
-# NOTE: Default GID == UID == 1000
 RUN adduser --disabled-password \
             --home "$DIR/" \
-            --gecos "" \
             "$USER"
 USER $USER
 
