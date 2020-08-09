@@ -1,10 +1,3 @@
-# This dockerfile is meant to compile a c-lightning x64 image
-# It is using multi stage build:
-# * downloader: Download litecoin/bitcoin and qemu binaries needed for c-lightning
-# * builder: Compile c-lightning dependencies, then c-lightning itself with static linking
-# * final: Copy the binaries required at runtime
-# The resulting image uploaded to dockerhub will only contain what is needed for runtime.
-# From the root of the repository, run "docker build -t yourimage:yourtag ."
 FROM debian:stretch-slim as downloader
 
 ARG USER=lnuser
@@ -17,30 +10,10 @@ RUN set -ex \
 
 WORKDIR /opt
 
+# Fetch and verify bitcoin
 COPY ./fetch-bitcoin.sh .
 RUN chmod 755 fetch-bitcoin.sh
-RUN echo "Current directory before everything"
-RUN pwd
-RUN ls -la
-RUN mkdir -p /opt/bitcoin && cd /opt/bitcoin 
-RUN echo "Current directory after cd"
-RUN pwd
-RUN ls -la
 RUN ./fetch-bitcoin.sh
-RUN echo "After run fetch-bitcoin"
-RUN ls -la
-RUN pwd
-RUN ls -la ./bitcoin
-RUN ls -la ./bin
-
-#RUN mkdir /opt/bitcoin && cd /opt/bitcoin \
-#    && wget -qO $BITCOIN_TARBALL "$BITCOIN_URL" \
-#    && wget -qO bitcoin.asc "$BITCOIN_ASC_URL" \
-#    && grep $BITCOIN_TARBALL bitcoin.asc | tee SHA256SUMS.asc \
-#    && sha256sum -c SHA256SUMS.asc \
-#    && BD=bitcoin-$BITCOIN_VERSION/bin \
-#    && tar -xzvf $BITCOIN_TARBALL $BD/bitcoin-cli --strip-components=1 \
-#    && rm $BITCOIN_TARBALL
 
 #ENV LITECOIN_VERSION 0.16.3
 #ENV LITECOIN_PGP_KEY FE3348877809386C
