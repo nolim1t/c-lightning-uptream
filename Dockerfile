@@ -48,7 +48,7 @@ COPY --from=downloader /opt/bin /usr/bin
 COPY tools/docker-entrypoint.sh entrypoint.sh
 
 RUN /usr/sbin/adduser --disabled-password --home "/data/" --gecos "" "lightning"
-USER lighting
+USER lightning
 
 ENV LIGHTNINGD_DATA=/data/.lightning
 ENV LIGHTNINGD_RPC_PORT=9835
