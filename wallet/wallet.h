@@ -18,11 +18,10 @@
 #include <lightningd/htlc_end.h>
 #include <lightningd/invoice.h>
 #include <lightningd/log.h>
-#include <onchaind/onchain_wire.h>
+#include <onchaind/onchaind_wire.h>
 #include <wally_bip32.h>
-#include <wire/gen_onion_wire.h>
+#include <wire/onion_wire.h>
 
-enum onion_type;
 struct amount_msat;
 struct invoices;
 struct channel;
@@ -31,6 +30,8 @@ struct node_id;
 struct oneshot;
 struct peer;
 struct timers;
+enum channel_state;
+enum state_change;
 
 struct wallet {
 	struct lightningd *ld;
@@ -45,58 +46,24 @@ struct wallet {
 	 * including all spent ones */
 	struct outpointfilter *owned_outpoints;
 
-	/* Filter matching all outpoints that might be a funding transaction on
-	 * the blockchain. This is currently all P2WSH outputs */
-	struct outpointfilter *utxoset_outpoints;
-
-	/* Unreleased txs, waiting for txdiscard/txsend */
-	struct list_head unreleased_txs;
-
 	/* How many keys should we look ahead at most? */
 	u64 keyscan_gap;
-};
-
-/* A transaction we've txprepared, but  haven't signed and released yet */
-struct unreleased_tx {
-	/* In wallet->unreleased_txs */
-	struct list_node list;
-	/* All the utxos. */
-	struct wallet_tx *wtx;
-	/* Outputs(scriptpubkey and satoshi) this pays to. */
-	struct bitcoin_tx_output **outputs;
-	/* The tx itself (unsigned initially) */
-	struct bitcoin_tx *tx;
-	struct bitcoin_txid txid;
-};
-
-/* Possible states for tracked outputs in the database. Not sure yet
- * whether we really want to have reservations reflected in the
- * database, it would simplify queries at the cost of some IO ops */
-/* /!\ This is a DB ENUM, please do not change the numbering of any
- * already defined elements (adding is ok) /!\ */
-enum output_status {
-	output_state_available= 0,
-	output_state_reserved = 1,
-	output_state_spent = 2,
-	/* Special status used to express that we don't care in
-	 * queries */
-	output_state_any = 255
 };
 
 static inline enum output_status output_status_in_db(enum output_status s)
 {
 	switch (s) {
-	case output_state_available:
-		BUILD_ASSERT(output_state_available == 0);
+	case OUTPUT_STATE_AVAILABLE:
+		BUILD_ASSERT(OUTPUT_STATE_AVAILABLE == 0);
 		return s;
-	case output_state_reserved:
-		BUILD_ASSERT(output_state_reserved == 1);
+	case OUTPUT_STATE_RESERVED:
+		BUILD_ASSERT(OUTPUT_STATE_RESERVED == 1);
 		return s;
-	case output_state_spent:
-		BUILD_ASSERT(output_state_spent == 2);
+	case OUTPUT_STATE_SPENT:
+		BUILD_ASSERT(OUTPUT_STATE_SPENT == 2);
 		return s;
 	/* This one doesn't go into db */
-	case output_state_any:
+	case OUTPUT_STATE_ANY:
 		break;
 	}
 	fatal("%s: %u is invalid", __func__, s);
@@ -194,7 +161,7 @@ struct forwarding {
 	struct amount_msat msat_in, msat_out, fee;
 	struct sha256 *payment_hash;
 	enum forward_status status;
-	enum onion_type failcode;
+	enum onion_wire failcode;
 	struct timeabs received_time;
 	/* May not be present if the HTLC was not resolved yet. */
 	struct timeabs *resolved_time;
@@ -441,30 +408,6 @@ struct utxo *wallet_utxo_get(const tal_t *ctx, struct wallet *w,
 			     const struct bitcoin_txid *txid,
 			     u32 outnum);
 
-const struct utxo **wallet_select_coins(const tal_t *ctx, struct wallet *w,
-					bool with_change,
-					struct amount_sat value,
-					const u32 feerate_per_kw,
-					size_t outscriptlen,
-					u32 maxheight,
-					struct amount_sat *fee_estimate,
-					struct amount_sat *change_satoshi);
-
-const struct utxo **wallet_select_all(const tal_t *ctx, struct wallet *w,
-				      const u32 feerate_per_kw,
-				      size_t outscriptlen,
-				      u32 maxheight,
-				      struct amount_sat *sat,
-				      struct amount_sat *fee_estimate);
-
-/* derive_redeem_scriptsig - Compute the scriptSig for a P2SH-P2WPKH
- *
- * @ctx - allocation context
- * @w - wallet
- * @keyindex - index of the internal BIP32 key
- */
-u8 *derive_redeem_scriptsig(const tal_t *ctx, struct wallet *w, u32 keyindex);
-
 /**
  * wallet_select_specific - Select utxos given an array of txids and an array of outputs index
  *
@@ -551,6 +494,24 @@ void wallet_channel_insert(struct wallet *w, struct channel *chan);
  * After fully resolving a channel, only keep a lightweight stub
  */
 void wallet_channel_close(struct wallet *w, u64 wallet_id);
+
+/**
+ * Adds a channel state change history entry into the database
+ */
+void wallet_state_change_add(struct wallet *w,
+			     const u64 channel_id,
+			     struct timeabs *timestamp,
+			     enum channel_state old_state,
+			     enum channel_state new_state,
+			     enum state_change cause,
+			     char *message);
+
+/**
+ * Gets all state change history entries for a channel from the database
+ */
+struct state_change_entry *wallet_state_change_get(struct wallet *w,
+						   const tal_t *ctx,
+						   u64 channel_id);
 
 /**
  * wallet_peer_delete -- After no more channels in peer, forget about it
@@ -662,7 +623,7 @@ void wallet_htlc_save_out(struct wallet *wallet,
 void wallet_htlc_update(struct wallet *wallet, const u64 htlc_dbid,
 			const enum htlc_state new_state,
 			const struct preimage *payment_key,
-			enum onion_type badonion,
+			enum onion_wire badonion,
 			const struct onionreply *failonion,
 			const u8 *failmsg,
 			bool *we_filled);
@@ -1027,6 +988,14 @@ void wallet_payment_delete(struct wallet *wallet,
 			   u64 partid);
 
 /**
+ * wallet_payment_delete_by_hash - Remove a payment
+ *
+ * Removes the payment from the database by hash; if it is a MPP payment
+ * it remove all parts with a single query.
+ */
+void wallet_payment_delete_by_hash(struct wallet *wallet, const struct sha256 *payment_hash);
+
+/**
  * wallet_local_htlc_out_delete - Remove a local outgoing failed HTLC
  *
  * This is not a generic HTLC cleanup!  This is specifically for the
@@ -1075,7 +1044,7 @@ void wallet_payment_get_failinfo(const tal_t *ctx,
 				 struct onionreply **failonionreply,
 				 bool *faildestperm,
 				 int *failindex,
-				 enum onion_type *failcode,
+				 enum onion_wire *failcode,
 				 struct node_id **failnode,
 				 struct short_channel_id **failchannel,
 				 u8 **failupdate,
@@ -1091,7 +1060,7 @@ void wallet_payment_set_failinfo(struct wallet *wallet,
 				 const struct onionreply *failonionreply,
 				 bool faildestperm,
 				 int failindex,
-				 enum onion_type failcode,
+				 enum onion_wire failcode,
 				 const struct node_id *failnode,
 				 const struct short_channel_id *failchannel,
 				 const u8 *failupdate,
@@ -1111,7 +1080,7 @@ const struct wallet_payment **wallet_payment_list(const tal_t *ctx,
  * wallet_htlc_sigs_save - Store the latest HTLC sigs for the channel
  */
 void wallet_htlc_sigs_save(struct wallet *w, u64 channel_id,
-			   secp256k1_ecdsa_signature *htlc_sigs);
+			   const struct bitcoin_signature *htlc_sigs);
 
 /**
  * wallet_network_check - Check that the wallet is setup for this chain
@@ -1148,14 +1117,11 @@ bool wallet_have_block(struct wallet *w, u32 blockheight);
  * Given the outpoint (txid, outnum), and the blockheight, mark the
  * corresponding DB entries as spent at the blockheight.
  *
- * @our_spend - set to true if found in our wallet's output set, false otherwise
- * @return scid The short_channel_id corresponding to the spent outpoint, if
- *         any.
+ * @return true if found in our wallet's output set, false otherwise
  */
-const struct short_channel_id *
-wallet_outpoint_spend(struct wallet *w, const tal_t *ctx, const u32 blockheight,
-		      const struct bitcoin_txid *txid, const u32 outnum,
-		      bool *our_spend);
+bool wallet_outpoint_spend(struct wallet *w, const tal_t *ctx,
+			   const u32 blockheight,
+			   const struct bitcoin_txid *txid, const u32 outnum);
 
 struct outpoint *wallet_outpoint_for_scid(struct wallet *w, tal_t *ctx,
 					  const struct short_channel_id *scid);
@@ -1165,7 +1131,22 @@ void wallet_utxoset_add(struct wallet *w, const struct bitcoin_tx *tx,
 			const u32 txindex, const u8 *scriptpubkey,
 			struct amount_sat sat);
 
-void wallet_transaction_add(struct wallet *w, const struct bitcoin_tx *tx,
+/**
+ * Retrieve all UTXO entries that were spent by the given blockheight.
+ *
+ * This allows us to retrieve any UTXO entries that were spent by a block,
+ * after the block has been processed. It's main use is to be able to tell
+ * `gossipd` about potential channel outpoints being spent, without having to
+ * track all outpoints in memory.
+ *
+ * In order to return correct results `blockheight` should not be called with
+ * a height below the UTXO set pruning height (see `UTXO_PRUNE_DEPTH` for the
+ * current value).
+ */
+const struct short_channel_id *
+wallet_utxoset_get_spent(const tal_t *ctx, struct wallet *w, u32 blockheight);
+
+void wallet_transaction_add(struct wallet *w, const struct wally_tx *tx,
 			    const u32 blockheight, const u32 txindex);
 
 void wallet_annotate_txout(struct wallet *w, const struct bitcoin_txid *txid,
@@ -1251,7 +1232,7 @@ void wallet_forwarded_payment_add(struct wallet *w, const struct htlc_in *in,
 				  const struct short_channel_id *scid_out,
 				  const struct htlc_out *out,
 				  enum forward_status state,
-				  enum onion_type failcode);
+				  enum onion_wire failcode);
 
 /**
  * Retrieve summary of successful forwarded payments' fees

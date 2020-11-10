@@ -4,7 +4,7 @@ lightning-fundpsbt -- Command to populate PSBT inputs from the wallet
 SYNOPSIS
 --------
 
-**fundpsbt** *satoshi* *feerate* *startweight* \[*minconf*\] \[*reserve*\]
+**fundpsbt** *satoshi* *feerate* *startweight* \[*minconf*\] \[*reserve*\] \[*locktime*\]
 
 DESCRIPTION
 -----------
@@ -36,6 +36,9 @@ outputs should have. Default is 1.
 *reserve* is a boolean: if true (the default), then *reserveinputs* is
 called (successfully, with *exclusive* true) on the returned PSBT.
 
+*locktime* is an optional locktime: if not set, it is set to a recent
+block height.
+
 EXAMPLE USAGE
 -------------
 
@@ -43,18 +46,18 @@ Let's assume the caller is trying to produce a 100,000 satoshi output.
 
 First, the caller estimates the weight of the core (typically 42) and
 known outputs of the transaction (typically (9 + scriptlen) * 4).  For
-a simple P2WPKH it's a 22 byte scriptpubkey, so that's 164 weight.
+a simple P2WPKH it's a 22 byte scriptpubkey, so that's 124 weight.
 
-It calls "*fundpsbt* 100000sat slow 206", which succeeds, and returns
+It calls "*fundpsbt* 100000sat slow 166", which succeeds, and returns
 the *psbt* and *feerate_per_kw* it used, the *estimated_final_weight*
 and any *excess_msat*.
 
 If *excess_msat* is greater than the cost of adding a change output,
 the caller adds a change output randomly to position 0 or 1 in the
 PSBT.  Say *feerate_per_kw* is 253, and the change output is a P2WPKH
-(weight 164), that would cost the cost is around 41 sats.  With the
-dust limit disallowing payments below 546 satoshis, we would only create
-a change output if *excess_msat* was greater or equal to 41 + 546.
+(weight 124), the cost is around 31 sats.  With the dust limit disallowing
+payments below 546 satoshis, we would only create a change output
+if *excess_msat* was greater or equal to 31 + 546.
 
 RETURN VALUE
 ------------
@@ -85,9 +88,10 @@ Rusty Russell <<rusty@rustcorp.com.au>> is mainly responsible.
 SEE ALSO
 --------
 
-lightning-reserveinputs(7), lightning-unreserveinputs(7).
+lightning-utxopsbt(7), lightning-reserveinputs(7), lightning-unreserveinputs(7).
 
 RESOURCES
 ---------
 
 Main web site: <https://github.com/ElementsProject/lightning>
+

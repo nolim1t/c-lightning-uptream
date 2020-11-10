@@ -69,13 +69,82 @@ static const struct feature_style feature_styles[] = {
 			  [NODE_ANNOUNCE_FEATURE] = FEATURE_REPRESENT,
 			  [CHANNEL_FEATURE] = FEATURE_DONT_REPRESENT } },
 #if EXPERIMENTAL_FEATURES
+	{ OPT_ANCHOR_OUTPUTS,
+	  .copy_style = { [INIT_FEATURE] = FEATURE_REPRESENT,
+			  [NODE_ANNOUNCE_FEATURE] = FEATURE_REPRESENT,
+			  [CHANNEL_FEATURE] = FEATURE_DONT_REPRESENT } },
 	{ OPT_ONION_MESSAGES,
 	  .copy_style = { [INIT_FEATURE] = FEATURE_REPRESENT,
 			  [NODE_ANNOUNCE_FEATURE] = FEATURE_REPRESENT,
 			  [BOLT11_FEATURE] = FEATURE_REPRESENT,
 			  [CHANNEL_FEATURE] = FEATURE_REPRESENT_AS_OPTIONAL} },
+
+	{ OPT_DUAL_FUND,
+	  .copy_style = { [INIT_FEATURE] = FEATURE_REPRESENT,
+			  [NODE_ANNOUNCE_FEATURE] = FEATURE_REPRESENT,
+			  [BOLT11_FEATURE] = FEATURE_REPRESENT,
+			  [CHANNEL_FEATURE] = FEATURE_DONT_REPRESENT} },
 #endif
 };
+
+struct dependency {
+	size_t depender;
+	size_t must_also_have;
+};
+
+static const struct dependency feature_deps[] = {
+	/* BOLT #9:
+	 * Name                | Description  | Context  | Dependencies  |
+	 *...
+	 * `gossip_queries_ex` | ...          | ...      | `gossip_queries` |
+	 *...
+	 * `payment_secret`    | ...          | ...      | `var_onion_optin` |
+	 *...
+	 * `basic_mpp`         | ...          | ...      | `payment_secret` |
+	 */
+	{ OPT_GOSSIP_QUERIES_EX, OPT_GOSSIP_QUERIES },
+	{ OPT_PAYMENT_SECRET, OPT_VAR_ONION },
+	{ OPT_BASIC_MPP, OPT_PAYMENT_SECRET },
+	/* BOLT #9:
+	 * Name                | Description  | Context  | Dependencies  |
+	 *...
+	 * `option_anchor_outputs` | ...      | ...      | `option_static_remotekey`
+	 */
+#if EXPERIMENTAL_FEATURES
+	{ OPT_ANCHOR_OUTPUTS, OPT_STATIC_REMOTEKEY },
+	/* BOLT-7b04b1461739c5036add61782d58ac490842d98b #9:
+	 * Name                | Description  | Context  | Dependencies  |
+	 * ...
+	 * `option_dual_fund`  | ...          | ...      | `option_anchor_outputs`
+	 */
+	{ OPT_DUAL_FUND, OPT_ANCHOR_OUTPUTS },
+#endif
+};
+
+static void trim_features(u8 **features)
+{
+	size_t trim, len = tal_bytelen(*features);
+
+	/* Don't try to tal_resize a NULL array */
+	if (len == 0)
+		return;
+
+	/* Big-endian bitfields are weird, but it means we trim
+	 * from the front: */
+	for (trim = 0; trim < len && (*features)[trim] == 0; trim++);
+	memmove(*features, *features + trim, len - trim);
+	tal_resize(features, len - trim);
+}
+
+static void clear_feature_bit(u8 *features, u32 bit)
+{
+	size_t bytenum = bit / 8, bitnum = bit % 8, len = tal_count(features);
+
+	if (bytenum >= len)
+		return;
+
+	features[len - 1 - bytenum] &= ~(1 << bitnum);
+}
 
 static enum feature_copy_style feature_copy_style(u32 f, enum feature_place p)
 {
@@ -136,6 +205,35 @@ bool feature_set_or(struct feature_set *a,
 	return true;
 }
 
+bool feature_set_sub(struct feature_set *a,
+		     const struct feature_set *b TAKES)
+{
+	/* Check first, before we change anything! */
+	for (size_t i = 0; i < ARRAY_SIZE(b->bits); i++) {
+		for (size_t j = 0; j < tal_bytelen(b->bits[i])*8; j++) {
+			if (feature_is_set(b->bits[i], j)
+			    && !feature_offered(a->bits[i], j)) {
+				if (taken(b))
+					tal_free(b);
+				return false;
+			}
+		}
+	}
+
+	for (size_t i = 0; i < ARRAY_SIZE(a->bits); i++) {
+		for (size_t j = 0; j < tal_bytelen(b->bits[i])*8; j++) {
+			if (feature_is_set(b->bits[i], j))
+				clear_feature_bit(a->bits[i], j);
+		}
+		trim_features(&a->bits[i]);
+	}
+
+
+	if (taken(b))
+		tal_free(b);
+	return true;
+}
+
 /* BOLT #1:
  *
  * All data fields are unsigned big-endian unless otherwise specified.
@@ -160,16 +258,6 @@ static bool test_bit(const u8 *features, size_t byte, unsigned int bit)
 	return features[tal_count(features) - 1 - byte] & (1 << (bit % 8));
 }
 
-static void clear_feature_bit(u8 *features, u32 bit)
-{
-	size_t bytenum = bit / 8, bitnum = bit % 8, len = tal_count(features);
-
-	if (bytenum >= len)
-		return;
-
-	features[len - 1 - bytenum] &= ~(1 << bitnum);
-}
-
 /* BOLT #7:
  *
  *   - MUST set `features` based on what features were negotiated for this channel, according to [BOLT #9](09-features.md#assigned-features-flags)
@@ -190,6 +278,7 @@ u8 *get_agreed_channelfeatures(const tal_t *ctx,
 		if (!feature_offered(their_features, i)) {
 			clear_feature_bit(f, COMPULSORY_FEATURE(i));
 			clear_feature_bit(f, OPTIONAL_FEATURE(i));
+			trim_features(&f);
 			continue;
 		}
 		max_len = (i / 8) + 1;
@@ -222,6 +311,22 @@ bool feature_negotiated(const struct feature_set *our_features,
 {
 	return feature_offered(their_features, f)
 		&& feature_offered(our_features->bits[INIT_FEATURE], f);
+}
+
+bool feature_check_depends(const u8 *their_features,
+			   size_t *depender, size_t *missing_dependency)
+{
+	for (size_t i = 0; i < ARRAY_SIZE(feature_deps); i++) {
+		if (!feature_offered(their_features, feature_deps[i].depender))
+			continue;
+		if (feature_offered(their_features,
+				    feature_deps[i].must_also_have))
+			continue;
+		*depender = feature_deps[i].depender;
+		*missing_dependency = feature_deps[i].must_also_have;
+		return false;
+	}
+	return true;
 }
 
 /**
@@ -279,6 +384,8 @@ static const char *feature_name(const tal_t *ctx, size_t f)
 		"option_static_remotekey",
 		"option_payment_secret",
 		"option_basic_mpp",
+		"option_support_large_channel",
+		"option_anchor_outputs",
 	};
 
 	if (f / 2 >= ARRAY_SIZE(fnames))

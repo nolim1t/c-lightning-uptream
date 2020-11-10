@@ -25,7 +25,7 @@ RUN ./fetch-bitcoin.sh
 #    && tar -xzvf litecoin.tar.gz $BD/litecoin-cli --strip-components=1 --exclude=*-qt \
 #    && rm litecoin.tar.gz
 
-FROM debian:stretch-slim as builder
+FROM debian:buster-slim as builder
 
 ENV LIGHTNINGD_VERSION=master
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates autoconf automake build-essential git libtool python3 python3-mako wget gnupg dirmngr git gettext libgmp-dev libsqlite3-dev net-tools zlib1g-dev unzip tclsh

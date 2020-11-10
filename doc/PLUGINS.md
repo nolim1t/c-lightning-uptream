@@ -57,9 +57,11 @@ interface.
 
 ### The `getmanifest` method
 
-The `getmanifest` method is required for all plugins and will be called on
-startup without any params. It MUST return a JSON object similar to
-this example:
+The `getmanifest` method is required for all plugins and will be
+called on startup with optional parameters (in particular, it may have
+`allow-deprecated-apis: false`, but you should accept, and ignore,
+other parameters).  It MUST return a JSON object similar to this
+example:
 
 ```json
 {
@@ -68,7 +70,8 @@ this example:
       "name": "greeting",
       "type": "string",
       "default": "World",
-      "description": "What name should I call you?"
+      "description": "What name should I call you?",
+      "deprecated": false
     }
   ],
   "rpcmethods": [
@@ -81,7 +84,8 @@ this example:
       "name": "gettime",
       "usage": "",
       "description": "Returns the current time in {timezone}",
-      "long_description": "Returns the current time in the timezone that is given as the only parameter.\nThis description may be quite long and is allowed to span multiple lines."
+      "long_description": "Returns the current time in the timezone that is given as the only parameter.\nThis description may be quite long and is allowed to span multiple lines.",
+      "deprecated": false
     }
   ],
   "subscriptions": [
@@ -89,8 +93,8 @@ this example:
     "disconnect"
   ],
   "hooks": [
-    "openchannel",
-    "htlc_accepted"
+    { "name": "openchannel", "before": ["another_plugin"] },
+    { "name": "htlc_accepted" }
   ],
   "features": {
     "node": "D0000000",
@@ -114,6 +118,11 @@ through verbatim. Notice that the `name`, `description` and `usage` fields
 are mandatory, while the `long_description` can be omitted (it'll be
 set to `description` if it was not provided). `usage` should surround optional
 parameter names in `[]`.
+
+`options` and `rpcmethods` can mark themselves `deprecated: true` if
+you plan on removing them: this will disable them if the user sets
+`allow-deprecated-apis` to false (which every developer should do,
+right?).
 
 The `dynamic` indicates if the plugin can be managed after `lightningd`
 has been started. Critical plugins that should not be stopped should set it
@@ -197,7 +206,21 @@ simple JSON object containing the options:
   "configuration": {
     "lightning-dir": "/home/user/.lightning/testnet",
     "rpc-file": "lightning-rpc",
-    "startup": true
+    "startup": true,
+    "network": "testnet",
+    "feature_set": {
+        "init": "02aaa2",
+        "node": "8000000002aaa2",
+        "channel": "",
+        "invoice": "028200"
+    },
+    "proxy": {
+        "type": "ipv4",
+        "address": "127.0.0.1",
+        "port": 9050
+    },
+    "torv3-enabled": true,
+    "use_proxy_always": false
   }
 }
 ```
@@ -298,6 +321,48 @@ into a block.
   }
 }
 ```
+
+### `channel_state_changed`
+
+A notification for topic `channel_state_changed` is sent every time a channel
+changes its state. The notification includes the `peer_id` and `channel_id`, the
+old and new channel states, the type of `cause` and a `message`.
+
+```json
+{
+    "channel_state_changed": {
+        "peer_id": "03bc9337c7a28bb784d67742ebedd30a93bacdf7e4ca16436ef3798000242b2251",
+        "channel_id": "a2d0851832f0e30a0cf778a826d72f077ca86b69f72677e0267f23f63a0599b4",
+        "short_channel_id" : "561820x1020x1",
+        "old_state": "CHANNELD_NORMAL",
+        "new_state": "CHANNELD_SHUTTING_DOWN",
+        "cause" : "remote",
+        "message" : "Peer closes channel"
+    }
+}
+```
+
+A `cause` can have the following values:
+ - "unknown"   Anything other than the reasons below. Should not happen.
+ - "local"     Unconscious internal reasons, e.g. dev fail of a channel.
+ - "user"      The operator or a plugin opened or closed a channel by intention.
+ - "remote"    The remote closed or funded a channel with us by intention.
+ - "protocol"  We need to close a channel because of bad signatures and such.
+ - "onchain"   A channel was closed onchain, while we were offline.
+
+Most state changes are caused subsequentially for a prior state change, e.g.
+"CLOSINGD_COMPLETE" is followed by "FUNDING_SPEND_SEEN". Because of this, the
+`cause` reflects the last known reason in terms of local or remote user
+interaction, protocol reasons, etc. More specifically, a `new_state`
+"FUNDING_SPEND_SEEN" will likely _not_ have "onchain" as a `cause` but some
+value such as "REMOTE" or "LOCAL" depending on who initiated the closing of a
+channel.
+
+Note: If the channel is not closed or being closed yet, the `cause` will reflect
+which side "remote" or "local" opened the channel.
+
+Note: If the cause is "onchain" this was very likely a conscious decision of the
+remote peer, but we have been offline.
 
 ### `connect`
 
@@ -612,6 +677,22 @@ at the time lightningd broadcasts the notification.
 
 `coin_type` is the BIP173 name for the coin which moved.
 
+### `openchannel_peer_sigs`
+
+When opening a channel with a peer using the collaborative transaction protocol
+(`opt_dual_fund`), this notification is fired when the peer sends us their funding
+transaction signatures, `tx_signatures`. We update the in-progress PSBT and return it
+here, with the peer's signatures attached.
+
+```json
+{
+	"openchannel_peer_sigs": {
+		"channel_id": "<hex of a channel id (note, v2 format)>",
+		"signed_psbt": "<Base64 serialized PSBT of funding transaction,
+				with peer's sigs>"
+	}
+}
+```
 
 ## Hooks
 
@@ -621,14 +702,25 @@ declares that it'd like to be consulted on what to do next for certain
 events in the daemon. A hook can then decide how `lightningd` should
 react to the given event.
 
+When hooks are registered, they can optionally specify "before" and
+"after" arrays of plugin names, which control what order they will be
+called in.  If a plugin name is unknown, it is ignored, otherwise if the
+hook calls cannot be ordered to satisfy the specifications of all
+plugin hooks, the plugin registration will fail.
+
 The call semantics of the hooks, i.e., when and how hooks are called, depend
 on the hook type. Most hooks are currently set to `single`-mode. In this mode
 only a single plugin can register the hook, and that plugin will get called
 for each event of that type. If a second plugin attempts to register the hook
-it gets killed and a corresponding log entry will be added to the logs. In
-`chain`-mode multiple plugins can register for the hook type and they are
-called sequentially if a matching event is triggered. Each plugin can then
-handle the event or defer by returning a `continue` result like the following:
+it gets killed and a corresponding log entry will be added to the logs.
+
+In `chain`-mode multiple plugins can register for the hook type and
+they are called in any order they are loaded (i.e. cmdline order
+first, configuration order file second: though note that the order of
+plugin directories is implementation-dependent), overriden only by
+`before` and `after` requirements the plugin's hook registrations specify.
+Each plugin can then handle the event or defer by returning a
+`continue` result like the following:
 
 ```json
 {
@@ -887,10 +979,10 @@ The payload of the hook call has the following format:
     "type": "legacy",
     "short_channel_id": "1x2x3",
     "forward_amount": "42msat",
-    "outgoing_cltv_value": 500014
+    "outgoing_cltv_value": 500014,
+    "shared_secret": "0000000000000000000000000000000000000000000000000000000000000000",
+    "next_onion": "[1365bytes of serialized onion]"
   },
-  "next_onion": "[1365bytes of serialized onion]",
-  "shared_secret": "0000000000000000000000000000000000000000000000000000000000000000",
   "htlc": {
     "amount": "43msat",
     "cltv_expiry": 500028,
@@ -902,23 +994,24 @@ The payload of the hook call has the following format:
 
 For detailed information about each field please refer to [BOLT 04 of the specification][bolt4], the following is just a brief summary:
 
- - `onion.payload` contains the unparsed payload that was sent to us from the
+ - `onion`:
+   - `payload` contains the unparsed payload that was sent to us from the
    sender of the payment.
- - `onion.type` is `legacy` for realm 0 payments, `tlv` for realm > 1.
- - `short_channel_id` determines the channel that the sender is hinting
-     should be used next.  Not present if we're the final destination.
- - `forward_amount` is the amount we should be forwarding to the next hop,
-     and should match the incoming funds in case we are the recipient.
- - `outgoing_cltv_value` determines what the CLTV value for the HTLC that we
-     forward to the next hop should be.
- - `total_msat` specifies the total amount to pay, if present.
- - `payment_secret` specifies the payment secret (which the payer should have obtained from the invoice), if present.
- - `next_onion` is the fully processed onion that we should be sending to the
-   next hop as part of the outgoing HTLC. Processed in this case means that we
-   took the incoming onion, decrypted it, extracted the payload destined for
-   us, and serialized the resulting onion again.
- - `shared_secret` is the shared secret we used to decrypt the incoming
-   onion. It is shared with the sender that constructed the onion.
+   - `type` is `legacy` for realm 0 payments, `tlv` for realm > 1.
+   - `short_channel_id` determines the channel that the sender is hinting
+       should be used next.  Not present if we're the final destination.
+   - `forward_amount` is the amount we should be forwarding to the next hop,
+       and should match the incoming funds in case we are the recipient.
+   - `outgoing_cltv_value` determines what the CLTV value for the HTLC that we
+       forward to the next hop should be.
+   - `total_msat` specifies the total amount to pay, if present.
+   - `payment_secret` specifies the payment secret (which the payer should have obtained from the invoice), if present.
+   - `next_onion` is the fully processed onion that we should be sending to the
+     next hop as part of the outgoing HTLC. Processed in this case means that we
+     took the incoming onion, decrypted it, extracted the payload destined for
+     us, and serialized the resulting onion again.
+   - `shared_secret` is the shared secret we used to decrypt the incoming
+     onion. It is shared with the sender that constructed the onion.
  - `htlc`:
    - `amount` is the amount that we received with the HTLC. This amount minus
      the `forward_amount` is the fee that will stay with us.
@@ -1155,8 +1248,11 @@ The plugin must respond to `gettxout` with the following fields:
 
 ### `sendrawtransaction`
 
-This call takes one parameter, a string representing a hex-encoded Bitcoin
-transaction.
+This call takes two parameters,
+a string `tx` representing a hex-encoded Bitcoin transaction,
+and a boolean `allowhighfees`, which if set means suppress
+any high-fees check implemented in the backend, since the given
+transaction may have fees that are very high.
 
 The plugin must broadcast it and respond with the following fields:
     - `success` (boolean), which is `true` if the broadcast succeeded

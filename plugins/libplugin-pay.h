@@ -4,7 +4,7 @@
 
 #include <common/bolt11.h>
 #include <plugins/libplugin.h>
-#include <wire/gen_onion_wire.h>
+#include <wire/onion_wire.h>
 
 struct legacy_payload {
 	struct short_channel_id scid;
@@ -46,7 +46,7 @@ struct payment_result {
 	struct preimage *payment_preimage;
 	u32 code;
 	const char* failcodename;
-	enum onion_type failcode;
+	enum onion_wire failcode;
 	const u8 *raw_message;
 	const char *message;
 	u32 *erring_index;
@@ -169,6 +169,8 @@ struct payment {
 
 	/* Real destination we want to route to */
 	struct node_id *destination;
+	/* Do we know for sure that this supports OPT_VAR_ONION? */
+	bool destination_has_tlv;
 
 	/* Payment hash extracted from the invoice if any. */
 	struct sha256 *payment_hash;
@@ -233,7 +235,7 @@ struct payment {
 	struct node_id *excluded_nodes;
 
 	/* Optional temporarily excluded channels/nodes (i.e. this routehint) */
-	const char **temp_exclusion;
+	struct node_id *temp_exclusion;
 
 	struct payment_result *result;
 
@@ -262,6 +264,22 @@ struct payment {
 	 * if we switch any of the parameters such as destination or
 	 * amount. */
 	bool failroute_retry;
+
+	/* A unique id for the root of this payment.  */
+	u64 id;
+
+	/* A short description of the route of this payment.  */
+	char *routetxt;
+
+	/* The maximum number of parallel outgoing HTLCs we will allow.
+	 * If unset, the maximum is based on the number of outgoing HTLCs.
+	 * This only applies for the root payment, and is ignored on non-root
+	 * payments.
+	 * Clients of the paymod system MUST NOT modify it, and individual
+	 * paymods MUST interact with it only via the payment_max_htlcs
+	 * and payment_lower_max_htlcs functions.
+	 */
+	u32 max_htlcs;
 };
 
 struct payment_modifier {
@@ -300,16 +318,26 @@ struct routehints_data {
 	/* What we did about routehints (if anything) */
 	const char *routehint_modifications;
 
-	/* Any remaining routehints to try. */
+	/* Array of routehints to try. */
 	struct route_info **routehints;
 
 	/* Current routehint, if any. */
 	struct route_info *current_routehint;
 
 	/* Position of the current routehint in the routehints
-	 * array. Inherited and incremented on child payments and reset on
-	 * split. */
+	 * array. Inherited on retry (and possibly incremented),
+	 * reset to 0 on split. */
 	int offset;
+	/* Base of the current routehint.
+	 * This is randomized to start routehints at a random point
+	 * on each split, to reduce the chances of multiple splits
+	 * going to the same routehint.
+	 * The sum of base + offset is used as the index into the
+	 * routehints array (wraps around).
+	 * offset is used to determine if we have run out of
+	 * routehints, base is used for randomization.
+	 */
+	int base;
 
 	/* We modify the CLTV in the getroute call, so we need to remember
 	 * what the final cltv delta was so we re-apply it correctly. */
@@ -370,6 +398,11 @@ REGISTER_PAYMENT_MODIFIER_HEADER(adaptive_splitter, struct adaptive_split_mod_da
  * or are disabled. We do this only for the root payment, to minimize the
  * overhead. */
 REGISTER_PAYMENT_MODIFIER_HEADER(local_channel_hints, void);
+/* The payee might be less well-connected than ourselves.
+ * This paymod limits the number of HTLCs based on the number of channels
+ * we detect the payee to have, in order to not exhaust the number of HTLCs
+ * each of those channels can bear.  */
+REGISTER_PAYMENT_MODIFIER_HEADER(payee_incoming_limit, void);
 
 struct payment *payment_new(tal_t *ctx, struct command *cmd,
 			    struct payment *parent,

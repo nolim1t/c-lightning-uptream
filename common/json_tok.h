@@ -16,6 +16,7 @@ struct command;
 struct command_result;
 struct json_escape;
 struct sha256;
+struct wally_psbt;
 
 /* Extract json array token */
 struct command_result *param_array(struct command *cmd, const char *name,
@@ -158,4 +159,17 @@ enum address_parse_result json_to_address_scriptpubkey(const tal_t *ctx,
 			     const struct chainparams *chainparams,
 			     const char *buffer,
 			     const jsmntok_t *tok, const u8 **scriptpubkey);
+
+
+struct command_result *param_bitcoin_address(struct command *cmd,
+					     const char *name,
+					     const char *buffer,
+					     const jsmntok_t *tok,
+					     const u8 **scriptpubkey);
+
+struct command_result *param_psbt(struct command *cmd,
+				  const char *name,
+				  const char *buffer,
+				  const jsmntok_t *tok,
+				  struct wally_psbt **psbt);
 #endif /* LIGHTNING_COMMON_JSON_TOK_H */

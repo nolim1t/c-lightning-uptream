@@ -13,6 +13,7 @@
 #include <inttypes.h>
 
 struct channel *new_initial_channel(const tal_t *ctx,
+				    const struct channel_id *cid,
 				    const struct bitcoin_txid *funding_txid,
 				    unsigned int funding_txout,
 				    u32 minimum_depth,
@@ -26,11 +27,13 @@ struct channel *new_initial_channel(const tal_t *ctx,
 				    const struct pubkey *local_funding_pubkey,
 				    const struct pubkey *remote_funding_pubkey,
 				    bool option_static_remotekey,
+				    bool option_anchor_outputs,
 				    enum side opener)
 {
 	struct channel *channel = tal(ctx, struct channel);
 	struct amount_msat remote_msatoshi;
 
+	channel->cid = *cid;
 	channel->funding_txid = *funding_txid;
 	channel->funding_txout = funding_txout;
 	channel->funding = funding;
@@ -64,6 +67,9 @@ struct channel *new_initial_channel(const tal_t *ctx,
 					 &channel->basepoints[!opener].payment);
 
 	channel->option_static_remotekey = option_static_remotekey;
+	channel->option_anchor_outputs = option_anchor_outputs;
+	if (option_anchor_outputs)
+		assert(option_static_remotekey);
 	return channel;
 }
 
@@ -98,7 +104,7 @@ struct bitcoin_tx *initial_channel_tx(const tal_t *ctx,
 	init_tx = initial_commit_tx(ctx, &channel->funding_txid,
 				    channel->funding_txout,
 				    channel->funding,
-				    cast_const(u8 *, *wscript),
+				    channel->funding_pubkey,
 				    channel->opener,
 				    /* They specify our to_self_delay and v.v. */
 				    channel->config[!side].to_self_delay,
@@ -111,6 +117,7 @@ struct bitcoin_tx *initial_channel_tx(const tal_t *ctx,
 				    0 ^ channel->commitment_number_obscurer,
 				    direct_outputs,
 				    side,
+				    channel->option_anchor_outputs,
 				    err_reason);
 
 	if (init_tx) {
@@ -151,4 +158,5 @@ static char *fmt_channel(const tal_t *ctx, const struct channel *channel)
 		       fmt_channel_view(ctx, &channel->view[LOCAL]),
 		       fmt_channel_view(ctx, &channel->view[REMOTE]));
 }
+/* Magic comment. */
 REGISTER_TYPE_TO_STRING(channel, fmt_channel);

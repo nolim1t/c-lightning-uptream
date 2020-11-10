@@ -32,6 +32,10 @@ void towire_feature_set(u8 **pptr, const struct feature_set *fset);
 bool feature_set_or(struct feature_set *a,
 		    const struct feature_set *b TAKES);
 
+/* a - b, or returns false if features not already in a */
+bool feature_set_sub(struct feature_set *a,
+		     const struct feature_set *b TAKES);
+
 /* Returns -1 if we're OK with all these offered features, otherwise first
  * unsupported (even) feature. */
 int features_unsupported(const struct feature_set *our_features,
@@ -49,6 +53,12 @@ bool feature_offered(const u8 *features, size_t f);
 /* Was this feature bit offered by them and us? */
 bool feature_negotiated(const struct feature_set *our_features,
 			const u8 *their_features, size_t f);
+
+/* Features can depend on other features: both must be set!
+ * Sets @depender, @missing_dependency if returns false.
+ */
+bool feature_check_depends(const u8 *their_features,
+			   size_t *depender, size_t *missing_dependency);
 
 /* Return a list of what (init) features we advertize. */
 const char **list_supported_features(const tal_t *ctx,
@@ -96,10 +106,12 @@ u8 *featurebits_or(const tal_t *ctx, const u8 *f1 TAKES, const u8 *f2 TAKES);
  * | 14/15 | `payment_secret` |... IN9 ...
  * | 16/17 | `basic_mpp`      |... IN9 ...
  * | 18/19 | `option_support_large_channel` |... IN ...
+ * | 20/21 | `option_anchor_outputs` |... IN ...
  */
 #define OPT_PAYMENT_SECRET			14
 #define OPT_BASIC_MPP				16
 #define OPT_LARGE_CHANNELS			18
+#define OPT_ANCHOR_OUTPUTS			20
 
 /* BOLT-9fc25cfd2895578c0b1ab701ebe6c1eb67a19623 #9:
  *
@@ -107,5 +119,10 @@ u8 *featurebits_or(const tal_t *ctx, const u8 *f1 TAKES, const u8 *f2 TAKES);
  */
 #if EXPERIMENTAL_FEATURES
 #define OPT_ONION_MESSAGES			102
+
+/* BOLT-7b04b1461739c5036add61782d58ac490842d98b #9:
+ * | 222/223 | `option_dual_fund` | ... IN9 ...
+ */
+#define OPT_DUAL_FUND 				222
 #endif
 #endif /* LIGHTNING_COMMON_FEATURES_H */

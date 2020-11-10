@@ -124,7 +124,7 @@ static struct route_step *decode_with_privkey(const tal_t *ctx, const u8 *onion,
 	struct privkey seckey;
 	struct route_step *step;
 	struct onionpacket packet;
-	enum onion_type why_bad;
+	enum onion_wire why_bad;
 	struct secret shared_secret;
 	if (!hex_decode(hexprivkey, strlen(hexprivkey), &seckey, sizeof(seckey)))
 		errx(1, "Invalid private key hex '%s'", hexprivkey);
@@ -132,7 +132,7 @@ static struct route_step *decode_with_privkey(const tal_t *ctx, const u8 *onion,
 	why_bad = parse_onionpacket(onion, TOTAL_PACKET_SIZE, &packet);
 
 	if (why_bad != 0)
-		errx(1, "Error parsing message: %s", onion_type_name(why_bad));
+		errx(1, "Error parsing message: %s", onion_wire_name(why_bad));
 
 	if (!onion_shared_secret(&shared_secret, &packet, &seckey))
 		errx(1, "Error creating shared secret.");
@@ -204,7 +204,6 @@ static char *opt_set_node_id(const char *arg, struct node_id *node_id)
 static void runtest(const char *filename)
 {
 	const tal_t *ctx = tal(NULL, u8);
-	bool valid;
 	char *buffer = grab_file(ctx, filename);
 	const jsmntok_t *toks, *session_key_tok, *associated_data_tok, *gentok,
 		*hopstok, *hop, *payloadtok, *pubkeytok, *typetok, *oniontok, *decodetok;
@@ -217,8 +216,8 @@ static void runtest(const char *filename)
 	struct route_step *step;
 	char *hexprivkey;
 
-	toks = json_parse_input(ctx, buffer, strlen(buffer), &valid);
-	if (!valid)
+	toks = json_parse_simple(ctx, buffer, strlen(buffer));
+	if (!toks)
 		errx(1, "File is not a valid JSON file.");
 
 	gentok = json_get_member(buffer, toks, "generate");

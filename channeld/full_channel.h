@@ -7,11 +7,13 @@
 #include <common/initial_channel.h>
 #include <common/sphinx.h>
 
+struct channel_id;
 struct existing_htlc;
 
 /**
  * new_full_channel: Given initial fees and funding, what is initial state?
  * @ctx: tal context to allocate return value from.
+ * @cid: The channel id.
  * @funding_txid: The commitment transaction id.
  * @funding_txout: The commitment transaction output number.
  * @minimum_depth: The minimum confirmations needed for funding transaction.
@@ -25,11 +27,13 @@ struct existing_htlc;
  * @local_fundingkey: local funding key
  * @remote_fundingkey: remote funding key
  * @option_static_remotekey: use `option_static_remotekey`.
+ * @option_anchor_outputs: use `option_anchor_outputs`.
  * @opener: which side initiated it.
  *
  * Returns state, or NULL if malformed.
  */
 struct channel *new_full_channel(const tal_t *ctx,
+				 const struct channel_id *cid,
 				 const struct bitcoin_txid *funding_txid,
 				 unsigned int funding_txout,
 				 u32 minimum_depth,
@@ -43,6 +47,7 @@ struct channel *new_full_channel(const tal_t *ctx,
 				 const struct pubkey *local_funding_pubkey,
 				 const struct pubkey *remote_funding_pubkey,
 				 bool option_static_remotekey,
+				 bool option_anchor_outputs,
 				 enum side opener);
 
 /**

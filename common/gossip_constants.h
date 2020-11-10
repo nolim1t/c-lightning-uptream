@@ -58,7 +58,7 @@
 /* BOLT #7:
  *
  * A node:
- *   - if a channel's latest `channel_update`s `timestamp` is older than two weeks
+ *   - if a channel's oldest `channel_update`s `timestamp` is older than two weeks
  *   (1209600 seconds):
  *     - MAY prune the channel.
  *     - MAY ignore the channel.
@@ -77,5 +77,8 @@
 /* How many seconds per token?  Normally 1 hour. */
 #define GOSSIP_TOKEN_TIME(dev_fast_gossip_flag) \
 	DEV_FAST_GOSSIP(dev_fast_gossip_flag, 1, 3600)
+
+/* This is where we keep our gossip */
+#define GOSSIP_STORE_FILENAME "gossip_store"
 
 #endif /* LIGHTNING_COMMON_GOSSIP_CONSTANTS_H */

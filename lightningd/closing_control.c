@@ -1,13 +1,13 @@
 #include <bitcoin/feerate.h>
 #include <bitcoin/script.h>
-#include <closingd/gen_closing_wire.h>
+#include <closingd/closingd_wiregen.h>
 #include <common/close_tx.h>
 #include <common/fee_states.h>
 #include <common/initial_commit_tx.h>
 #include <common/per_peer_state.h>
 #include <common/utils.h>
 #include <errno.h>
-#include <gossipd/gen_gossip_wire.h>
+#include <gossipd/gossipd_wiregen.h>
 #include <inttypes.h>
 #include <lightningd/bitcoind.h>
 #include <lightningd/chaintopology.h>
@@ -97,7 +97,7 @@ static void peer_received_closing_signature(struct channel *channel,
 	struct bitcoin_txid tx_id;
 	struct lightningd *ld = channel->peer->ld;
 
-	if (!fromwire_closing_received_signature(msg, msg, &sig, &tx)) {
+	if (!fromwire_closingd_received_signature(msg, msg, &sig, &tx)) {
 		channel_internal_error(channel, "Bad closing_received_signature %s",
 				       tal_hex(msg, msg));
 		return;
@@ -115,12 +115,12 @@ static void peer_received_closing_signature(struct channel *channel,
 	bitcoin_txid(channel->last_tx, &tx_id);
 	/* OK, you can continue now. */
 	subd_send_msg(channel->owner,
-		      take(towire_closing_received_signature_reply(channel, &tx_id)));
+		      take(towire_closingd_received_signature_reply(channel, &tx_id)));
 }
 
 static void peer_closing_complete(struct channel *channel, const u8 *msg)
 {
-	if (!fromwire_closing_complete(msg)) {
+	if (!fromwire_closingd_complete(msg)) {
 		channel_internal_error(channel, "Bad closing_complete %s",
 				       tal_hex(msg, msg));
 		return;
@@ -137,25 +137,29 @@ static void peer_closing_complete(struct channel *channel, const u8 *msg)
 
 	/* Channel gets dropped to chain cooperatively. */
 	drop_to_chain(channel->peer->ld, channel, true);
-	channel_set_state(channel, CLOSINGD_SIGEXCHANGE, CLOSINGD_COMPLETE);
+	channel_set_state(channel,
+			  CLOSINGD_SIGEXCHANGE,
+			  CLOSINGD_COMPLETE,
+			  REASON_UNKNOWN,
+			  "Closing complete");
 }
 
 static unsigned closing_msg(struct subd *sd, const u8 *msg, const int *fds UNUSED)
 {
-	enum closing_wire_type t = fromwire_peektype(msg);
+	enum closingd_wire t = fromwire_peektype(msg);
 
 	switch (t) {
-	case WIRE_CLOSING_RECEIVED_SIGNATURE:
+	case WIRE_CLOSINGD_RECEIVED_SIGNATURE:
 		peer_received_closing_signature(sd->channel, msg);
 		break;
 
-	case WIRE_CLOSING_COMPLETE:
+	case WIRE_CLOSINGD_COMPLETE:
 		peer_closing_complete(sd->channel, msg);
 		break;
 
 	/* We send these, not receive them */
-	case WIRE_CLOSING_INIT:
-	case WIRE_CLOSING_RECEIVED_SIGNATURE_REPLY:
+	case WIRE_CLOSINGD_INIT:
+	case WIRE_CLOSINGD_RECEIVED_SIGNATURE_REPLY:
 		break;
 	}
 
@@ -192,7 +196,7 @@ void peer_start_closingd(struct channel *channel,
 					   "lightning_closingd",
 					   channel, &channel->peer->id,
 					   channel->log, true,
-					   closing_wire_type_name, closing_msg,
+					   closingd_wire_name, closing_msg,
 					   channel_errmsg,
 					   channel_set_billboard,
 					   take(&pps->peer_fd),
@@ -216,12 +220,14 @@ void peer_start_closingd(struct channel *channel,
 	 *    fee of the final commitment transaction, as calculated in
 	 *    [BOLT #3](03-transactions.md#fee-calculation).
 	 */
-	final_commit_feerate = get_feerate(channel->channel_info.fee_states,
+	final_commit_feerate = get_feerate(channel->fee_states,
 					   channel->opener, LOCAL);
-	feelimit = commit_tx_base_fee(final_commit_feerate, 0);
+	feelimit = commit_tx_base_fee(final_commit_feerate, 0,
+				      channel->option_anchor_outputs);
 
 	/* Pick some value above slow feerate (or min possible if unknown) */
-	minfee = commit_tx_base_fee(feerate_min(ld, NULL), 0);
+	minfee = commit_tx_base_fee(feerate_min(ld, NULL), 0,
+				    channel->option_anchor_outputs);
 
 	/* If we can't determine feerate, start at half unilateral feerate. */
 	feerate = mutual_close_feerate(ld->topology);
@@ -230,7 +236,8 @@ void peer_start_closingd(struct channel *channel,
 		if (feerate < feerate_floor())
 			feerate = feerate_floor();
 	}
-	startfee = commit_tx_base_fee(feerate, 0);
+	startfee = commit_tx_base_fee(feerate, 0,
+				      channel->option_anchor_outputs);
 
 	if (amount_sat_greater(startfee, feelimit))
 		startfee = feelimit;
@@ -253,7 +260,9 @@ void peer_start_closingd(struct channel *channel,
 					 &channel->funding),
 			  type_to_string(tmpctx, struct amount_msat,
 					 &channel->our_msat));
-		channel_fail_permanent(channel, "our_msat overflow on closing");
+		channel_fail_permanent(channel,
+				       REASON_LOCAL,
+				       "our_msat overflow on closing");
 		return;
 	}
 
@@ -271,13 +280,15 @@ void peer_start_closingd(struct channel *channel,
 				      num_revocations-1,
 				      &last_remote_per_commit_secret)) {
 		channel_fail_permanent(channel,
+				       REASON_LOCAL,
 				       "Could not get revocation secret %"PRIu64,
 				       num_revocations-1);
 		return;
 	}
-	initmsg = towire_closing_init(tmpctx,
+	initmsg = towire_closingd_init(tmpctx,
 				      chainparams,
 				      pps,
+				      &channel->cid,
 				      &channel->funding_txid,
 				      channel->funding_outnum,
 				      channel->funding,
@@ -308,6 +319,6 @@ void peer_start_closingd(struct channel *channel,
 	 * be used. */
 	if (channel->scid)
 		subd_send_msg(channel->peer->ld->gossip,
-			      take(towire_gossip_local_channel_close(
+			      take(towire_gossipd_local_channel_close(
 				  tmpctx, channel->scid)));
 }

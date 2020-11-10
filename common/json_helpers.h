@@ -17,12 +17,17 @@ struct secret;
 struct short_channel_id;
 struct wireaddr;
 struct wireaddr_internal;
+struct wally_psbt;
 
 /* Decode a hex-encoded payment preimage */
 bool json_to_preimage(const char *buffer, const jsmntok_t *tok, struct preimage *preimage);
 
 /* Extract a secret from this. */
 bool json_to_secret(const char *buffer, const jsmntok_t *tok, struct secret *dest);
+
+/* Extract a psbt from this. */
+bool json_to_psbt(const tal_t *ctx, const char *buffer,
+		  const jsmntok_t *tok, struct wally_psbt **dest);
 
 /* Extract a pubkey from this */
 bool json_to_pubkey(const char *buffer, const jsmntok_t *tok,
@@ -83,6 +88,11 @@ void json_add_secret(struct json_stream *response,
 void json_add_node_id(struct json_stream *response,
 				const char *fieldname,
 				const struct node_id *id);
+
+/* '"fieldname" : "0289abcdef..."' or "0289abcdef..." if fieldname is NULL */
+void json_add_channel_id(struct json_stream *response,
+			 const char *fieldname,
+			 const struct channel_id *cid);
 
 /* '"fieldname" : <hexrev>' or "<hexrev>" if fieldname is NULL */
 void json_add_txid(struct json_stream *result, const char *fieldname,
@@ -147,6 +157,6 @@ void json_add_tx(struct json_stream *result,
 /* '"fieldname" : "cHNidP8BAJoCAAAAAljo..." or "cHNidP8BAJoCAAAAAljo..." if fieldname is NULL */
 void json_add_psbt(struct json_stream *stream,
 		   const char *fieldname,
-		   struct wally_psbt *psbt);
+		   const struct wally_psbt *psbt);
 
 #endif /* LIGHTNING_COMMON_JSON_HELPERS_H */

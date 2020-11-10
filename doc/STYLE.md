@@ -202,12 +202,12 @@ You can always add a new output JSON field (Changelog-Added), but you
 cannot remove one without going through a 6-month deprecation cycle
 (Changelog-Deprecated)
 
-So, only output it if `deprecated-apis` is true, so users can test
+So, only output it if `allow-deprecated-apis` is true, so users can test
 their code is futureproof.  In 6 months remove it (Changelog-Removed).
 
 Changing existing input parameters is harder, and should generally be
 avoided.  Adding input parameters is possible, but should be done
-cautiously as too many parameters gets unwieldy quickly.
+cautiously as too many parameters get unwieldy quickly.
 
 ## Github Workflows
 

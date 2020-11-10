@@ -8,10 +8,10 @@
 #include <ccan/tal/path/path.h>
 #include <ccan/tal/str/str.h>
 #include <common/crypto_state.h>
-#include <common/gen_peer_status_wire.h>
-#include <common/gen_status_wire.h>
 #include <common/memleak.h>
+#include <common/peer_status_wiregen.h>
 #include <common/per_peer_state.h>
+#include <common/status_wiregen.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <lightningd/lightningd.h>
@@ -27,7 +27,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <wallet/db.h>
-#include <wire/gen_common_wire.h>
+#include <wire/common_wiregen.h>
 #include <wire/wire_io.h>
 
 static bool move_fd(int from, int to)
@@ -434,7 +434,7 @@ static struct io_plan *sd_msg_read(struct io_conn *conn, struct subd *sd)
 	tal_steal(tmpctx, sd->msg_in);
 
 	/* We handle status messages ourselves. */
-	switch ((enum status)type) {
+	switch ((enum status_wire)type) {
 	case WIRE_STATUS_LOG:
 	case WIRE_STATUS_IO:
 		if (!log_status_msg(sd->log, sd->node_id, sd->msg_in))
@@ -458,7 +458,7 @@ static struct io_plan *sd_msg_read(struct io_conn *conn, struct subd *sd)
 	}
 
 	if (sd->channel) {
-		switch ((enum peer_status)type) {
+		switch ((enum peer_status_wire)type) {
 		case WIRE_STATUS_PEER_ERROR:
 			/* We expect 3 fds after this */
 			if (!sd->fds_in) {
@@ -747,7 +747,7 @@ void subd_send_msg(struct subd *sd, const u8 *msg_out)
 	u16 type = fromwire_peektype(msg_out);
 	/* FIXME: We should use unique upper bits for each daemon, then
 	 * have generate-wire.py add them, just assert here. */
-	assert(!strstarts(common_wire_type_name(type), "INVALID") ||
+	assert(!strstarts(common_wire_name(type), "INVALID") ||
 	       !strstarts(sd->msgname(type), "INVALID"));
 	msg_enqueue(sd->outq, msg_out);
 }

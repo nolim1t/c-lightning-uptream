@@ -539,49 +539,74 @@ validate_jsmn_parse_output(const jsmntok_t *p, const jsmntok_t *end)
 JSMN Result Validation Ends
 -----------------------------------------------------------------------------*/
 
-jsmntok_t *json_parse_input(const tal_t *ctx,
-			    const char *input, int len, bool *valid)
+void toks_reset(jsmntok_t *toks)
 {
-	jsmn_parser parser;
-	jsmntok_t *toks;
+	assert(tal_count(toks) >= 1);
+	toks[0].type = JSMN_UNDEFINED;
+}
+
+jsmntok_t *toks_alloc(const tal_t *ctx)
+{
+	jsmntok_t *toks = tal_arr(ctx, jsmntok_t, 10);
+	toks_reset(toks);
+	return toks;
+}
+
+bool json_parse_input(jsmn_parser *parser,
+		      jsmntok_t **toks,
+		      const char *input, int len,
+		      bool *complete)
+{
 	int ret;
 
-	toks = tal_arr(ctx, jsmntok_t, 10);
-	toks[0].type = JSMN_UNDEFINED;
-
-	jsmn_init(&parser);
 again:
-	ret = jsmn_parse(&parser, input, len, toks, tal_count(toks) - 1);
+	ret = jsmn_parse(parser, input, len, *toks, tal_count(*toks) - 1);
 
 	switch (ret) {
 	case JSMN_ERROR_INVAL:
-		*valid = false;
-		return tal_free(toks);
+		return false;
 	case JSMN_ERROR_NOMEM:
-		tal_resize(&toks, tal_count(toks) * 2);
+		tal_resize(toks, tal_count(*toks) * 2);
 		goto again;
 	}
 
 	/* Check whether we read at least one full root element, i.e., root
 	 * element has its end set. */
-	if (toks[0].type == JSMN_UNDEFINED || toks[0].end == -1) {
-		*valid = true;
-		return tal_free(toks);
+	if ((*toks)[0].type == JSMN_UNDEFINED || (*toks)[0].end == -1) {
+		*complete = false;
+		return true;
 	}
 
 	/* If we read a partial element at the end of the stream we'll get a
 	 * ret=JSMN_ERROR_PART, but due to the previous check we know we read at
 	 * least one full element, so count tokens that are part of this root
 	 * element. */
-	ret = json_next(toks) - toks;
+	ret = json_next(*toks) - *toks;
+
+	if (!validate_jsmn_parse_output(*toks, *toks + ret))
+		return false;
 
 	/* Cut to length and return. */
-	*valid = validate_jsmn_parse_output(toks, toks + ret);
-	tal_resize(&toks, ret + 1);
+	tal_resize(toks, ret + 1);
 	/* Make sure last one is always referenceable. */
-	toks[ret].type = -1;
-	toks[ret].start = toks[ret].end = toks[ret].size = 0;
+	(*toks)[ret].type = -1;
+	(*toks)[ret].start = (*toks)[ret].end = (*toks)[ret].size = 0;
 
+	*complete = true;
+	return true;
+}
+
+jsmntok_t *json_parse_simple(const tal_t *ctx, const char *input, int len)
+{
+	bool complete;
+	jsmn_parser parser;
+	jsmntok_t *toks = toks_alloc(ctx);
+
+	jsmn_init(&parser);
+
+	if (!json_parse_input(&parser, &toks, input, len, &complete)
+	    || !complete)
+		return tal_free(toks);
 	return toks;
 }
 
@@ -802,47 +827,30 @@ void json_add_time(struct json_stream *result, const char *fieldname,
 	json_add_string(result, fieldname, timebuf);
 }
 
+void json_add_timeiso(struct json_stream *result,
+		      const char *fieldname,
+		      struct timeabs *time)
+{
+	char iso8601_msec_fmt[sizeof("YYYY-mm-ddTHH:MM:SS.%03dZ")];
+	char iso8601_s[sizeof("YYYY-mm-ddTHH:MM:SS.nnnZ")];
+
+	strftime(iso8601_msec_fmt, sizeof(iso8601_msec_fmt),
+		 "%FT%T.%%03dZ", gmtime(&time->ts.tv_sec));
+	snprintf(iso8601_s, sizeof(iso8601_s),
+		 iso8601_msec_fmt, (int) time->ts.tv_nsec / 1000000);
+
+	json_add_string(result, fieldname, iso8601_s);
+}
+
+
 void json_add_tok(struct json_stream *result, const char *fieldname,
                   const jsmntok_t *tok, const char *buffer)
 {
-	int i = 0;
-	const jsmntok_t *t;
+	char *space;
+	assert(tok->type != JSMN_UNDEFINED);
 
-	switch (tok->type) {
-	case JSMN_PRIMITIVE:
-		if (json_tok_is_num(buffer, tok)) {
-			json_to_int(buffer, tok, &i);
-			json_add_num(result, fieldname, i);
-		}
-		return;
-
-	case JSMN_STRING:
-		if (json_tok_streq(buffer, tok, "true"))
-			json_add_bool(result, fieldname, true);
-		else if (json_tok_streq(buffer, tok, "false"))
-			json_add_bool(result, fieldname, false);
-		else
-			json_add_string(result, fieldname, json_strdup(tmpctx, buffer, tok));
-		return;
-
-	case JSMN_ARRAY:
-		json_array_start(result, fieldname);
-		json_for_each_arr(i, t, tok)
-			json_add_tok(result, NULL, t, buffer);
-		json_array_end(result);
-		return;
-
-	case JSMN_OBJECT:
-		json_object_start(result, fieldname);
-		json_for_each_obj(i, t, tok)
-			json_add_tok(result, json_strdup(tmpctx, buffer, t), t+1, buffer);
-		json_object_end(result);
-		return;
-
-	case JSMN_UNDEFINED:
-		break;
-	}
-	abort();
+	space = json_member_direct(result, fieldname, json_tok_full_len(tok));
+	memcpy(space, json_tok_full(buffer, tok), json_tok_full_len(tok));
 }
 
 void json_add_errcode(struct json_stream *result, const char *fieldname,

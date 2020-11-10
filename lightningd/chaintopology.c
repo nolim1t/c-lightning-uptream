@@ -16,6 +16,8 @@
 #include <ccan/tal/str/str.h>
 #include <common/coin_mvt.h>
 #include <common/configdir.h>
+#include <common/features.h>
+#include <common/htlc_tx.h>
 #include <common/json_command.h>
 #include <common/jsonrpc_errors.h>
 #include <common/memleak.h>
@@ -83,29 +85,30 @@ static void filter_block_txs(struct chain_topology *topo, struct block *b)
 			txo = txowatch_hash_get(&topo->txowatches, &out);
 			if (txo) {
 				wallet_transaction_add(topo->ld->wallet,
-						       tx, b->height, i);
+						       tx->wtx, b->height, i);
 				txowatch_fire(txo, tx, j, b);
 			}
 		}
 
 		owned = AMOUNT_SAT(0);
-		bitcoin_txid(tx, &txid);
+		txid = b->txids[i];
 		if (txfilter_match(topo->bitcoind->ld->owned_txfilter, tx)) {
 			wallet_extract_owned_outputs(topo->bitcoind->ld->wallet,
 						     tx->wtx, &b->height, &owned);
-			wallet_transaction_add(topo->ld->wallet, tx, b->height,
-					       i);
+			wallet_transaction_add(topo->ld->wallet, tx->wtx,
+					       b->height, i);
 		}
 
 		/* We did spends first, in case that tells us to watch tx. */
 		if (watching_txid(topo, &txid) || we_broadcast(topo, &txid)) {
 			wallet_transaction_add(topo->ld->wallet,
-					       tx, b->height, i);
+					       tx->wtx, b->height, i);
 		}
 
 		txwatch_inform(topo, &txid, tx);
 	}
 	b->full_txs = tal_free(b->full_txs);
+	b->txids = tal_free(b->txids);
 }
 
 size_t get_tx_depth(const struct chain_topology *topo,
@@ -216,10 +219,12 @@ static void broadcast_done(struct bitcoind *bitcoind,
 	}
 }
 
-void broadcast_tx(struct chain_topology *topo,
-		  struct channel *channel, const struct bitcoin_tx *tx,
-		  void (*failed_or_success)(struct channel *channel,
-					    bool success, const char *err))
+void broadcast_tx_ahf(struct chain_topology *topo,
+		      struct channel *channel, const struct bitcoin_tx *tx,
+		      bool allowhighfees,
+		      void (*failed)(struct channel *channel,
+				     bool success,
+				     const char *err))
 {
 	/* Channel might vanish: topo owns it to start with. */
 	struct outgoing_tx *otx = tal(topo, struct outgoing_tx);
@@ -228,16 +233,26 @@ void broadcast_tx(struct chain_topology *topo,
 	otx->channel = channel;
 	bitcoin_txid(tx, &otx->txid);
 	otx->hextx = tal_hex(otx, rawtx);
-	otx->failed_or_success = failed_or_success;
+	otx->failed_or_success = failed;
 	tal_free(rawtx);
 	tal_add_destructor2(channel, clear_otx_channel, otx);
 
 	log_debug(topo->log, "Broadcasting txid %s",
 		  type_to_string(tmpctx, struct bitcoin_txid, &otx->txid));
 
-	wallet_transaction_add(topo->ld->wallet, tx, 0, 0);
-	bitcoind_sendrawtx(topo->bitcoind, otx->hextx, broadcast_done, otx);
+	wallet_transaction_add(topo->ld->wallet, tx->wtx, 0, 0);
+	bitcoind_sendrawtx_ahf(topo->bitcoind, otx->hextx, allowhighfees,
+			       broadcast_done, otx);
 }
+void broadcast_tx(struct chain_topology *topo,
+		  struct channel *channel, const struct bitcoin_tx *tx,
+		  void (*failed)(struct channel *channel,
+				 bool success,
+				 const char *err))
+{
+	return broadcast_tx_ahf(topo, channel, tx, false, failed);
+}
+
 
 static enum watch_result closeinfo_txid_confirmed(struct lightningd *ld,
 						  struct channel *channel,
@@ -348,7 +363,7 @@ static void add_feerate_history(struct chain_topology *topo,
 /* Did the the feerate change since we last estimated it ? */
 static bool feerate_changed(struct chain_topology *topo, u32 old_feerates[])
 {
-	for (enum feerate f = 0; f < NUM_FEERATES; f++) {
+	for (int f = 0; f < NUM_FEERATES; f++) {
 		if (try_get_feerate(topo, f) != old_feerates[f])
 			return true;
 	}
@@ -526,6 +541,11 @@ static struct command_result *json_feerates(struct command *cmd,
 	json_object_end(response);
 
 	if (!missing) {
+		/* It actually is negotiated per-channel... */
+		bool anchor_outputs
+			= feature_offered(cmd->ld->our_features->bits[INIT_FEATURE],
+					  OPT_ANCHOR_OUTPUTS);
+
 		json_object_start(response, "onchain_fee_estimates");
 		/* eg 020000000001016f51de645a47baa49a636b8ec974c28bdff0ac9151c0f4eda2dbe3b41dbe711d000000001716001401fad90abcd66697e2592164722de4a95ebee165ffffffff0240420f00000000002200205b8cd3b914cf67cdd8fa6273c930353dd36476734fbd962102c2df53b90880cdb73f890000000000160014c2ccab171c2a5be9dab52ec41b825863024c54660248304502210088f65e054dbc2d8f679de3e40150069854863efa4a45103b2bb63d060322f94702200d3ae8923924a458cffb0b7360179790830027bb6b29715ba03e12fc22365de1012103d745445c9362665f22e0d96e9e766f273f3260dea39c8a76bfa05dd2684ddccf00000000 == weight 702 */
 		json_add_num(response, "opening_channel_satoshis",
@@ -536,20 +556,15 @@ static struct command_result *json_feerates(struct command *cmd,
 		/* eg. 02000000000101c4fecaae1ea940c15ec502de732c4c386d51f981317605bbe5ad2c59165690ab00000000009db0e280010a2d0f00000000002200208d290003cedb0dd00cd5004c2d565d55fc70227bf5711186f4fa9392f8f32b4a0400483045022100952fcf8c730c91cf66bcb742cd52f046c0db3694dc461e7599be330a22466d790220740738a6f9d9e1ae5c86452fa07b0d8dddc90f8bee4ded24a88fe4b7400089eb01483045022100db3002a93390fc15c193da57d6ce1020e82705e760a3aa935ebe864bd66dd8e8022062ee9c6aa7b88ff4580e2671900a339754116371d8f40eba15b798136a76cd150147522102324266de8403b3ab157a09f1f784d587af61831c998c151bcc21bb74c2b2314b2102e3bd38009866c9da8ec4aa99cc4ea9c6c0dd46df15c61ef0ce1f271291714e5752ae9a3ed620 == weight 598 */
 		json_add_u64(response, "unilateral_close_satoshis",
 			     unilateral_feerate(cmd->ld->topology) * 598 / 1000);
-		/* BOLT #3:
-		 *
-		 * The *expected weight* of an HTLC transaction is calculated as follows:
-		 * ...
-		 * results in weights of:
-		 *
-		 *	663 (HTLC-timeout)
-		 *	703 (HTLC-success)
-		 *
-		 */
+
+		/* This really depends on whether we *negotiated*
+		 * option_anchor_outputs for a particular channel! */
 		json_add_u64(response, "htlc_timeout_satoshis",
-			     htlc_resolution_feerate(cmd->ld->topology) * 663 / 1000);
+			     htlc_timeout_fee(htlc_resolution_feerate(cmd->ld->topology),
+					      anchor_outputs).satoshis /* Raw: estimate */);
 		json_add_u64(response, "htlc_success_satoshis",
-			     htlc_resolution_feerate(cmd->ld->topology) * 703 / 1000);
+			     htlc_success_fee(htlc_resolution_feerate(cmd->ld->topology),
+					      anchor_outputs).satoshis /* Raw: estimate */);
 		json_object_end(response);
 	}
 
@@ -739,14 +754,14 @@ log_fee:
  */
 static void topo_update_spends(struct chain_topology *topo, struct block *b)
 {
-	const struct short_channel_id *scid;
+	const struct short_channel_id *spent_scids;
 	for (size_t i = 0; i < tal_count(b->full_txs); i++) {
 		const struct bitcoin_tx *tx = b->full_txs[i];
 		bool our_tx = true, includes_our_spend = false;
 		struct bitcoin_txid txid;
 		struct amount_sat inputs_total = AMOUNT_SAT(0);
 
-		bitcoin_txid(tx, &txid);
+		txid = b->txids[i];
 
 		for (size_t j = 0; j < tx->wtx->num_inputs; j++) {
 			const struct wally_tx_input *input = &tx->wtx->inputs[j];
@@ -755,15 +770,9 @@ static void topo_update_spends(struct chain_topology *topo, struct block *b)
 
 			bitcoin_tx_input_get_txid(tx, j, &outpoint_txid);
 
-			scid = wallet_outpoint_spend(topo->ld->wallet, tmpctx,
-						     b->height, &outpoint_txid,
-						     input->index,
-						     &our_spend);
-			if (scid) {
-				gossipd_notify_spend(topo->bitcoind->ld, scid);
-				tal_free(scid);
-			}
-
+			our_spend = wallet_outpoint_spend(
+			    topo->ld->wallet, tmpctx, b->height, &outpoint_txid,
+			    input->index);
 			our_tx &= our_spend;
 			includes_our_spend |= our_spend;
 			if (our_spend) {
@@ -781,6 +790,15 @@ static void topo_update_spends(struct chain_topology *topo, struct block *b)
 			record_tx_outs_and_fees(topo->ld, tx, &txid,
 						b->height, inputs_total, our_tx);
 	}
+	/* Retrieve all potential channel closes from the UTXO set and
+	 * tell gossipd about them. */
+	spent_scids =
+	    wallet_utxoset_get_spent(tmpctx, topo->ld->wallet, b->height);
+
+	for (size_t i=0; i<tal_count(spent_scids); i++) {
+		gossipd_notify_spend(topo->bitcoind->ld, &spent_scids[i]);
+	}
+	tal_free(spent_scids);
 }
 
 static void topo_add_utxos(struct chain_topology *topo, struct block *b)
@@ -841,6 +859,7 @@ static struct block *new_block(struct chain_topology *topo,
 	b->hdr = blk->hdr;
 
 	b->full_txs = tal_steal(b, blk->tx);
+	b->txids = tal_steal(b, blk->txids);
 
 	return b;
 }

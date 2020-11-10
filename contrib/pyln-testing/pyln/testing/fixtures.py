@@ -1,10 +1,11 @@
 from concurrent import futures
 from pyln.testing.db import SqliteDbProvider, PostgresDbProvider
 from pyln.testing.utils import NodeFactory, BitcoinD, ElementsD, env, DEVELOPER, LightningNode, TEST_DEBUG
+from typing import Dict
 
 import logging
 import os
-import pytest
+import pytest  # type: ignore
 import re
 import shutil
 import sys
@@ -13,7 +14,7 @@ import tempfile
 
 # A dict in which we count how often a particular test has run so far. Used to
 # give each attempt its own numbered directory, and avoid clashes.
-__attempts = {}
+__attempts: Dict[str, int] = {}
 
 
 @pytest.fixture(scope="session")
@@ -25,20 +26,39 @@ def test_base_dir():
 
     yield directory
 
-    if os.listdir(directory) == []:
+    # Now check if any test directory is left because the corresponding test
+    # failed. If there are no such tests we can clean up the root test
+    # directory.
+    contents = [d for d in os.listdir(directory) if os.path.isdir(os.path.join(directory, d)) and d.startswith('test_')]
+    if contents == []:
         shutil.rmtree(directory)
+    else:
+        print("Leaving base_dir {} intact, it still has test sub-directories with failure details: {}".format(
+            directory, contents
+        ))
 
 
 @pytest.fixture(autouse=True)
 def setup_logging():
-    logger = logging.getLogger()
-    before_handlers = list(logger.handlers)
+    """Enable logging before a test, and remove all handlers afterwards.
 
+    This "fixes" the issue with pytest swapping out sys.stdout and sys.stderr
+    in order to capture the output, but then doesn't wait for the handlers to
+    terminate before closing the buffers. It just iterates through all
+    loggers, and removes any handlers that might be pointing at sys.stdout or
+    sys.stderr.
+
+    """
     if TEST_DEBUG:
         logging.basicConfig(level=logging.DEBUG, stream=sys.stdout)
 
     yield
-    logger.handlers = before_handlers
+
+    loggers = [logging.getLogger()] + list(logging.Logger.manager.loggerDict.values())
+    for logger in loggers:
+        handlers = getattr(logger, 'handlers', [])
+        for handler in handlers:
+            logger.removeHandler(handler)
 
 
 @pytest.fixture
@@ -107,9 +127,15 @@ def bitcoind(directory, teardown_checks):
 
     info = bitcoind.rpc.getnetworkinfo()
 
-    if info['version'] < 160000:
+    # FIXME: include liquid-regtest in this check after elementsd has been
+    # updated
+    if info['version'] < 200100 and env('TEST_NETWORK') != 'liquid-regtest':
         bitcoind.rpc.stop()
-        raise ValueError("bitcoind is too old. At least version 16000 (v0.16.0)"
+        raise ValueError("bitcoind is too old. At least version 20100 (v0.20.1)"
+                         " is needed, current version is {}".format(info['version']))
+    elif info['version'] < 160000:
+        bitcoind.rpc.stop()
+        raise ValueError("elementsd is too old. At least version 160000 (v0.16.0)"
                          " is needed, current version is {}".format(info['version']))
 
     info = bitcoind.rpc.getblockchaininfo()
@@ -307,7 +333,7 @@ providers = {
 }
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
 def db_provider(test_base_dir):
     provider = providers[os.getenv('TEST_DB_PROVIDER', 'sqlite3')](test_base_dir)
     provider.start()

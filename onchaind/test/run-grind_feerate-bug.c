@@ -37,27 +37,27 @@ bool fromwire_bool(const u8 **cursor UNNEEDED, size_t *max UNNEEDED)
 /* Generated stub for fromwire_fail */
 void *fromwire_fail(const u8 **cursor UNNEEDED, size_t *max UNNEEDED)
 { fprintf(stderr, "fromwire_fail called!\n"); abort(); }
-/* Generated stub for fromwire_hsm_get_per_commitment_point_reply */
-bool fromwire_hsm_get_per_commitment_point_reply(const tal_t *ctx UNNEEDED, const void *p UNNEEDED, struct pubkey *per_commitment_point UNNEEDED, struct secret **old_commitment_secret UNNEEDED)
-{ fprintf(stderr, "fromwire_hsm_get_per_commitment_point_reply called!\n"); abort(); }
-/* Generated stub for fromwire_onchain_depth */
-bool fromwire_onchain_depth(const void *p UNNEEDED, struct bitcoin_txid *txid UNNEEDED, u32 *depth UNNEEDED, bool *is_replay UNNEEDED)
-{ fprintf(stderr, "fromwire_onchain_depth called!\n"); abort(); }
-/* Generated stub for fromwire_onchain_dev_memleak */
-bool fromwire_onchain_dev_memleak(const void *p UNNEEDED)
-{ fprintf(stderr, "fromwire_onchain_dev_memleak called!\n"); abort(); }
-/* Generated stub for fromwire_onchain_htlc */
-bool fromwire_onchain_htlc(const void *p UNNEEDED, struct htlc_stub *htlc UNNEEDED, bool *tell_if_missing UNNEEDED, bool *tell_immediately UNNEEDED)
-{ fprintf(stderr, "fromwire_onchain_htlc called!\n"); abort(); }
-/* Generated stub for fromwire_onchain_init */
-bool fromwire_onchain_init(const tal_t *ctx UNNEEDED, const void *p UNNEEDED, struct shachain *shachain UNNEEDED, const struct chainparams **chainparams UNNEEDED, struct amount_sat *funding_amount_satoshi UNNEEDED, struct amount_msat *our_msat UNNEEDED, struct pubkey *old_remote_per_commitment_point UNNEEDED, struct pubkey *remote_per_commitment_point UNNEEDED, u32 *local_to_self_delay UNNEEDED, u32 *remote_to_self_delay UNNEEDED, u32 *delayed_to_us_feerate UNNEEDED, u32 *htlc_feerate UNNEEDED, u32 *penalty_feerate UNNEEDED, struct amount_sat *local_dust_limit_satoshi UNNEEDED, struct bitcoin_txid *our_broadcast_txid UNNEEDED, u8 **local_scriptpubkey UNNEEDED, u8 **remote_scriptpubkey UNNEEDED, struct pubkey *ourwallet_pubkey UNNEEDED, enum side *opener UNNEEDED, struct basepoints *local_basepoints UNNEEDED, struct basepoints *remote_basepoints UNNEEDED, struct tx_parts **tx_parts UNNEEDED, u32 *locktime UNNEEDED, u32 *tx_blockheight UNNEEDED, u32 *reasonable_depth UNNEEDED, secp256k1_ecdsa_signature **htlc_signature UNNEEDED, u64 *num_htlcs UNNEEDED, u32 *min_possible_feerate UNNEEDED, u32 *max_possible_feerate UNNEEDED, struct pubkey **possible_remote_per_commit_point UNNEEDED, bool *option_static_remotekey UNNEEDED, bool *is_replay UNNEEDED)
-{ fprintf(stderr, "fromwire_onchain_init called!\n"); abort(); }
-/* Generated stub for fromwire_onchain_known_preimage */
-bool fromwire_onchain_known_preimage(const void *p UNNEEDED, struct preimage *preimage UNNEEDED, bool *is_replay UNNEEDED)
-{ fprintf(stderr, "fromwire_onchain_known_preimage called!\n"); abort(); }
-/* Generated stub for fromwire_onchain_spent */
-bool fromwire_onchain_spent(const tal_t *ctx UNNEEDED, const void *p UNNEEDED, struct tx_parts **tx UNNEEDED, u32 *input_num UNNEEDED, u32 *blockheight UNNEEDED, bool *is_replay UNNEEDED)
-{ fprintf(stderr, "fromwire_onchain_spent called!\n"); abort(); }
+/* Generated stub for fromwire_hsmd_get_per_commitment_point_reply */
+bool fromwire_hsmd_get_per_commitment_point_reply(const tal_t *ctx UNNEEDED, const void *p UNNEEDED, struct pubkey *per_commitment_point UNNEEDED, struct secret **old_commitment_secret UNNEEDED)
+{ fprintf(stderr, "fromwire_hsmd_get_per_commitment_point_reply called!\n"); abort(); }
+/* Generated stub for fromwire_onchaind_depth */
+bool fromwire_onchaind_depth(const void *p UNNEEDED, struct bitcoin_txid *txid UNNEEDED, u32 *depth UNNEEDED, bool *is_replay UNNEEDED)
+{ fprintf(stderr, "fromwire_onchaind_depth called!\n"); abort(); }
+/* Generated stub for fromwire_onchaind_dev_memleak */
+bool fromwire_onchaind_dev_memleak(const void *p UNNEEDED)
+{ fprintf(stderr, "fromwire_onchaind_dev_memleak called!\n"); abort(); }
+/* Generated stub for fromwire_onchaind_htlc */
+bool fromwire_onchaind_htlc(const void *p UNNEEDED, struct htlc_stub *htlc UNNEEDED, bool *tell_if_missing UNNEEDED, bool *tell_immediately UNNEEDED)
+{ fprintf(stderr, "fromwire_onchaind_htlc called!\n"); abort(); }
+/* Generated stub for fromwire_onchaind_init */
+bool fromwire_onchaind_init(const tal_t *ctx UNNEEDED, const void *p UNNEEDED, struct shachain *shachain UNNEEDED, const struct chainparams **chainparams UNNEEDED, struct amount_sat *funding_amount_satoshi UNNEEDED, struct amount_msat *our_msat UNNEEDED, struct pubkey *old_remote_per_commitment_point UNNEEDED, struct pubkey *remote_per_commitment_point UNNEEDED, u32 *local_to_self_delay UNNEEDED, u32 *remote_to_self_delay UNNEEDED, u32 *delayed_to_us_feerate UNNEEDED, u32 *htlc_feerate UNNEEDED, u32 *penalty_feerate UNNEEDED, struct amount_sat *local_dust_limit_satoshi UNNEEDED, struct bitcoin_txid *our_broadcast_txid UNNEEDED, u8 **local_scriptpubkey UNNEEDED, u8 **remote_scriptpubkey UNNEEDED, struct pubkey *ourwallet_pubkey UNNEEDED, enum side *opener UNNEEDED, struct basepoints *local_basepoints UNNEEDED, struct basepoints *remote_basepoints UNNEEDED, struct tx_parts **tx_parts UNNEEDED, u32 *locktime UNNEEDED, u32 *tx_blockheight UNNEEDED, u32 *reasonable_depth UNNEEDED, struct bitcoin_signature **htlc_signature UNNEEDED, u64 *num_htlcs UNNEEDED, u32 *min_possible_feerate UNNEEDED, u32 *max_possible_feerate UNNEEDED, struct pubkey **possible_remote_per_commit_point UNNEEDED, struct pubkey *local_funding_pubkey UNNEEDED, struct pubkey *remote_funding_pubkey UNNEEDED, bool *option_static_remotekey UNNEEDED, bool *option_anchor_outputs UNNEEDED, bool *is_replay UNNEEDED, u32 *min_relay_feerate UNNEEDED)
+{ fprintf(stderr, "fromwire_onchaind_init called!\n"); abort(); }
+/* Generated stub for fromwire_onchaind_known_preimage */
+bool fromwire_onchaind_known_preimage(const void *p UNNEEDED, struct preimage *preimage UNNEEDED, bool *is_replay UNNEEDED)
+{ fprintf(stderr, "fromwire_onchaind_known_preimage called!\n"); abort(); }
+/* Generated stub for fromwire_onchaind_spent */
+bool fromwire_onchaind_spent(const tal_t *ctx UNNEEDED, const void *p UNNEEDED, struct tx_parts **tx UNNEEDED, u32 *input_num UNNEEDED, u32 *blockheight UNNEEDED, bool *is_replay UNNEEDED)
+{ fprintf(stderr, "fromwire_onchaind_spent called!\n"); abort(); }
 /* Generated stub for fromwire_peektype */
 int fromwire_peektype(const u8 *cursor UNNEEDED)
 { fprintf(stderr, "fromwire_peektype called!\n"); abort(); }
@@ -87,13 +87,15 @@ u8 fromwire_u8(const u8 **cursor UNNEEDED, size_t *max UNNEEDED)
 /* Generated stub for htlc_offered_wscript */
 u8 *htlc_offered_wscript(const tal_t *ctx UNNEEDED,
 			 const struct ripemd160 *ripemd UNNEEDED,
-			 const struct keyset *keyset UNNEEDED)
+			 const struct keyset *keyset UNNEEDED,
+			 bool option_anchor_outputs UNNEEDED)
 { fprintf(stderr, "htlc_offered_wscript called!\n"); abort(); }
 /* Generated stub for htlc_received_wscript */
 u8 *htlc_received_wscript(const tal_t *ctx UNNEEDED,
 			  const struct ripemd160 *ripemd UNNEEDED,
 			  const struct abs_locktime *expiry UNNEEDED,
-			  const struct keyset *keyset UNNEEDED)
+			  const struct keyset *keyset UNNEEDED,
+			  bool option_anchor_outputs UNNEEDED)
 { fprintf(stderr, "htlc_received_wscript called!\n"); abort(); }
 /* Generated stub for htlc_success_tx */
 struct bitcoin_tx *htlc_success_tx(const tal_t *ctx UNNEEDED,
@@ -104,23 +106,21 @@ struct bitcoin_tx *htlc_success_tx(const tal_t *ctx UNNEEDED,
 				   struct amount_msat htlc_msatoshi UNNEEDED,
 				   u16 to_self_delay UNNEEDED,
 				   u32 feerate_per_kw UNNEEDED,
-				   const struct keyset *keyset UNNEEDED)
+				   const struct keyset *keyset UNNEEDED,
+				   bool option_anchor_outputs UNNEEDED)
 { fprintf(stderr, "htlc_success_tx called!\n"); abort(); }
 /* Generated stub for master_badmsg */
 void master_badmsg(u32 type_expected UNNEEDED, const u8 *msg)
 { fprintf(stderr, "master_badmsg called!\n"); abort(); }
-/* Generated stub for memleak_enter_allocations */
-struct htable *memleak_enter_allocations(const tal_t *ctx UNNEEDED,
-					 const void *exclude1 UNNEEDED,
-					 const void *exclude2 UNNEEDED)
-{ fprintf(stderr, "memleak_enter_allocations called!\n"); abort(); }
-/* Generated stub for memleak_remove_referenced */
-void memleak_remove_referenced(struct htable *memtable UNNEEDED, const void *root UNNEEDED)
-{ fprintf(stderr, "memleak_remove_referenced called!\n"); abort(); }
-/* Generated stub for memleak_scan_region */
-void memleak_scan_region(struct htable *memtable UNNEEDED,
-			 const void *p UNNEEDED, size_t bytelen UNNEEDED)
-{ fprintf(stderr, "memleak_scan_region called!\n"); abort(); }
+/* Generated stub for memleak_find_allocations */
+struct htable *memleak_find_allocations(const tal_t *ctx UNNEEDED,
+					const void *exclude1 UNNEEDED,
+					const void *exclude2 UNNEEDED)
+{ fprintf(stderr, "memleak_find_allocations called!\n"); abort(); }
+/* Generated stub for memleak_remove_region */
+void memleak_remove_region(struct htable *memtable UNNEEDED,
+			   const void *p UNNEEDED, size_t bytelen UNNEEDED)
+{ fprintf(stderr, "memleak_remove_region called!\n"); abort(); }
 /* Generated stub for new_coin_chain_fees */
 struct chain_coin_mvt *new_coin_chain_fees(const tal_t *ctx UNNEEDED,
 					   const char *account_name UNNEEDED,
@@ -186,9 +186,9 @@ struct chain_coin_mvt *new_coin_withdrawal_sat(const tal_t *ctx UNNEEDED,
 /* Generated stub for notleak_ */
 void *notleak_(const void *ptr UNNEEDED, bool plus_children UNNEEDED)
 { fprintf(stderr, "notleak_ called!\n"); abort(); }
-/* Generated stub for onchain_wire_type_name */
-const char *onchain_wire_type_name(int e UNNEEDED)
-{ fprintf(stderr, "onchain_wire_type_name called!\n"); abort(); }
+/* Generated stub for onchaind_wire_name */
+const char *onchaind_wire_name(int e UNNEEDED)
+{ fprintf(stderr, "onchaind_wire_name called!\n"); abort(); }
 /* Generated stub for peer_billboard */
 void peer_billboard(bool perm UNNEEDED, const char *fmt UNNEEDED, ...)
 { fprintf(stderr, "peer_billboard called!\n"); abort(); }
@@ -218,54 +218,54 @@ void towire(u8 **pptr UNNEEDED, const void *data UNNEEDED, size_t len UNNEEDED)
 /* Generated stub for towire_bool */
 void towire_bool(u8 **pptr UNNEEDED, bool v UNNEEDED)
 { fprintf(stderr, "towire_bool called!\n"); abort(); }
-/* Generated stub for towire_hsm_get_per_commitment_point */
-u8 *towire_hsm_get_per_commitment_point(const tal_t *ctx UNNEEDED, u64 n UNNEEDED)
-{ fprintf(stderr, "towire_hsm_get_per_commitment_point called!\n"); abort(); }
-/* Generated stub for towire_hsm_sign_delayed_payment_to_us */
-u8 *towire_hsm_sign_delayed_payment_to_us(const tal_t *ctx UNNEEDED, u64 commit_num UNNEEDED, const struct bitcoin_tx *tx UNNEEDED, const u8 *wscript UNNEEDED)
-{ fprintf(stderr, "towire_hsm_sign_delayed_payment_to_us called!\n"); abort(); }
-/* Generated stub for towire_hsm_sign_penalty_to_us */
-u8 *towire_hsm_sign_penalty_to_us(const tal_t *ctx UNNEEDED, const struct secret *revocation_secret UNNEEDED, const struct bitcoin_tx *tx UNNEEDED, const u8 *wscript UNNEEDED)
-{ fprintf(stderr, "towire_hsm_sign_penalty_to_us called!\n"); abort(); }
-/* Generated stub for towire_hsm_sign_remote_htlc_to_us */
-u8 *towire_hsm_sign_remote_htlc_to_us(const tal_t *ctx UNNEEDED, const struct pubkey *remote_per_commitment_point UNNEEDED, const struct bitcoin_tx *tx UNNEEDED, const u8 *wscript UNNEEDED)
-{ fprintf(stderr, "towire_hsm_sign_remote_htlc_to_us called!\n"); abort(); }
-/* Generated stub for towire_onchain_add_utxo */
-u8 *towire_onchain_add_utxo(const tal_t *ctx UNNEEDED, const struct bitcoin_txid *prev_out_tx UNNEEDED, u32 prev_out_index UNNEEDED, const struct pubkey *per_commit_point UNNEEDED, struct amount_sat value UNNEEDED, u32 blockheight UNNEEDED, const u8 *scriptpubkey UNNEEDED)
-{ fprintf(stderr, "towire_onchain_add_utxo called!\n"); abort(); }
-/* Generated stub for towire_onchain_all_irrevocably_resolved */
-u8 *towire_onchain_all_irrevocably_resolved(const tal_t *ctx UNNEEDED)
-{ fprintf(stderr, "towire_onchain_all_irrevocably_resolved called!\n"); abort(); }
-/* Generated stub for towire_onchain_annotate_txin */
-u8 *towire_onchain_annotate_txin(const tal_t *ctx UNNEEDED, const struct bitcoin_txid *txid UNNEEDED, u32 innum UNNEEDED, enum wallet_tx_type type UNNEEDED)
-{ fprintf(stderr, "towire_onchain_annotate_txin called!\n"); abort(); }
-/* Generated stub for towire_onchain_annotate_txout */
-u8 *towire_onchain_annotate_txout(const tal_t *ctx UNNEEDED, const struct bitcoin_txid *txid UNNEEDED, u32 outnum UNNEEDED, enum wallet_tx_type type UNNEEDED)
-{ fprintf(stderr, "towire_onchain_annotate_txout called!\n"); abort(); }
-/* Generated stub for towire_onchain_broadcast_tx */
-u8 *towire_onchain_broadcast_tx(const tal_t *ctx UNNEEDED, const struct bitcoin_tx *tx UNNEEDED, enum wallet_tx_type type UNNEEDED)
-{ fprintf(stderr, "towire_onchain_broadcast_tx called!\n"); abort(); }
-/* Generated stub for towire_onchain_dev_memleak_reply */
-u8 *towire_onchain_dev_memleak_reply(const tal_t *ctx UNNEEDED, bool leak UNNEEDED)
-{ fprintf(stderr, "towire_onchain_dev_memleak_reply called!\n"); abort(); }
-/* Generated stub for towire_onchain_extracted_preimage */
-u8 *towire_onchain_extracted_preimage(const tal_t *ctx UNNEEDED, const struct preimage *preimage UNNEEDED)
-{ fprintf(stderr, "towire_onchain_extracted_preimage called!\n"); abort(); }
-/* Generated stub for towire_onchain_htlc_timeout */
-u8 *towire_onchain_htlc_timeout(const tal_t *ctx UNNEEDED, const struct htlc_stub *htlc UNNEEDED)
-{ fprintf(stderr, "towire_onchain_htlc_timeout called!\n"); abort(); }
-/* Generated stub for towire_onchain_init_reply */
-u8 *towire_onchain_init_reply(const tal_t *ctx UNNEEDED)
-{ fprintf(stderr, "towire_onchain_init_reply called!\n"); abort(); }
-/* Generated stub for towire_onchain_missing_htlc_output */
-u8 *towire_onchain_missing_htlc_output(const tal_t *ctx UNNEEDED, const struct htlc_stub *htlc UNNEEDED)
-{ fprintf(stderr, "towire_onchain_missing_htlc_output called!\n"); abort(); }
-/* Generated stub for towire_onchain_notify_coin_mvt */
-u8 *towire_onchain_notify_coin_mvt(const tal_t *ctx UNNEEDED, const struct chain_coin_mvt *mvt UNNEEDED)
-{ fprintf(stderr, "towire_onchain_notify_coin_mvt called!\n"); abort(); }
-/* Generated stub for towire_onchain_unwatch_tx */
-u8 *towire_onchain_unwatch_tx(const tal_t *ctx UNNEEDED, const struct bitcoin_txid *txid UNNEEDED)
-{ fprintf(stderr, "towire_onchain_unwatch_tx called!\n"); abort(); }
+/* Generated stub for towire_hsmd_get_per_commitment_point */
+u8 *towire_hsmd_get_per_commitment_point(const tal_t *ctx UNNEEDED, u64 n UNNEEDED)
+{ fprintf(stderr, "towire_hsmd_get_per_commitment_point called!\n"); abort(); }
+/* Generated stub for towire_hsmd_sign_delayed_payment_to_us */
+u8 *towire_hsmd_sign_delayed_payment_to_us(const tal_t *ctx UNNEEDED, u64 commit_num UNNEEDED, const struct bitcoin_tx *tx UNNEEDED, const u8 *wscript UNNEEDED)
+{ fprintf(stderr, "towire_hsmd_sign_delayed_payment_to_us called!\n"); abort(); }
+/* Generated stub for towire_hsmd_sign_penalty_to_us */
+u8 *towire_hsmd_sign_penalty_to_us(const tal_t *ctx UNNEEDED, const struct secret *revocation_secret UNNEEDED, const struct bitcoin_tx *tx UNNEEDED, const u8 *wscript UNNEEDED)
+{ fprintf(stderr, "towire_hsmd_sign_penalty_to_us called!\n"); abort(); }
+/* Generated stub for towire_hsmd_sign_remote_htlc_to_us */
+u8 *towire_hsmd_sign_remote_htlc_to_us(const tal_t *ctx UNNEEDED, const struct pubkey *remote_per_commitment_point UNNEEDED, const struct bitcoin_tx *tx UNNEEDED, const u8 *wscript UNNEEDED, bool option_anchor_outputs UNNEEDED)
+{ fprintf(stderr, "towire_hsmd_sign_remote_htlc_to_us called!\n"); abort(); }
+/* Generated stub for towire_onchaind_add_utxo */
+u8 *towire_onchaind_add_utxo(const tal_t *ctx UNNEEDED, const struct bitcoin_txid *prev_out_tx UNNEEDED, u32 prev_out_index UNNEEDED, const struct pubkey *per_commit_point UNNEEDED, struct amount_sat value UNNEEDED, u32 blockheight UNNEEDED, const u8 *scriptpubkey UNNEEDED)
+{ fprintf(stderr, "towire_onchaind_add_utxo called!\n"); abort(); }
+/* Generated stub for towire_onchaind_all_irrevocably_resolved */
+u8 *towire_onchaind_all_irrevocably_resolved(const tal_t *ctx UNNEEDED)
+{ fprintf(stderr, "towire_onchaind_all_irrevocably_resolved called!\n"); abort(); }
+/* Generated stub for towire_onchaind_annotate_txin */
+u8 *towire_onchaind_annotate_txin(const tal_t *ctx UNNEEDED, const struct bitcoin_txid *txid UNNEEDED, u32 innum UNNEEDED, enum wallet_tx_type type UNNEEDED)
+{ fprintf(stderr, "towire_onchaind_annotate_txin called!\n"); abort(); }
+/* Generated stub for towire_onchaind_annotate_txout */
+u8 *towire_onchaind_annotate_txout(const tal_t *ctx UNNEEDED, const struct bitcoin_txid *txid UNNEEDED, u32 outnum UNNEEDED, enum wallet_tx_type type UNNEEDED)
+{ fprintf(stderr, "towire_onchaind_annotate_txout called!\n"); abort(); }
+/* Generated stub for towire_onchaind_broadcast_tx */
+u8 *towire_onchaind_broadcast_tx(const tal_t *ctx UNNEEDED, const struct bitcoin_tx *tx UNNEEDED, enum wallet_tx_type type UNNEEDED, bool is_rbf UNNEEDED)
+{ fprintf(stderr, "towire_onchaind_broadcast_tx called!\n"); abort(); }
+/* Generated stub for towire_onchaind_dev_memleak_reply */
+u8 *towire_onchaind_dev_memleak_reply(const tal_t *ctx UNNEEDED, bool leak UNNEEDED)
+{ fprintf(stderr, "towire_onchaind_dev_memleak_reply called!\n"); abort(); }
+/* Generated stub for towire_onchaind_extracted_preimage */
+u8 *towire_onchaind_extracted_preimage(const tal_t *ctx UNNEEDED, const struct preimage *preimage UNNEEDED)
+{ fprintf(stderr, "towire_onchaind_extracted_preimage called!\n"); abort(); }
+/* Generated stub for towire_onchaind_htlc_timeout */
+u8 *towire_onchaind_htlc_timeout(const tal_t *ctx UNNEEDED, const struct htlc_stub *htlc UNNEEDED)
+{ fprintf(stderr, "towire_onchaind_htlc_timeout called!\n"); abort(); }
+/* Generated stub for towire_onchaind_init_reply */
+u8 *towire_onchaind_init_reply(const tal_t *ctx UNNEEDED)
+{ fprintf(stderr, "towire_onchaind_init_reply called!\n"); abort(); }
+/* Generated stub for towire_onchaind_missing_htlc_output */
+u8 *towire_onchaind_missing_htlc_output(const tal_t *ctx UNNEEDED, const struct htlc_stub *htlc UNNEEDED)
+{ fprintf(stderr, "towire_onchaind_missing_htlc_output called!\n"); abort(); }
+/* Generated stub for towire_onchaind_notify_coin_mvt */
+u8 *towire_onchaind_notify_coin_mvt(const tal_t *ctx UNNEEDED, const struct chain_coin_mvt *mvt UNNEEDED)
+{ fprintf(stderr, "towire_onchaind_notify_coin_mvt called!\n"); abort(); }
+/* Generated stub for towire_onchaind_unwatch_tx */
+u8 *towire_onchaind_unwatch_tx(const tal_t *ctx UNNEEDED, const struct bitcoin_txid *txid UNNEEDED)
+{ fprintf(stderr, "towire_onchaind_unwatch_tx called!\n"); abort(); }
 /* Generated stub for towire_secp256k1_ecdsa_signature */
 void towire_secp256k1_ecdsa_signature(u8 **pptr UNNEEDED,
 			      const secp256k1_ecdsa_signature *signature UNNEEDED)
@@ -291,7 +291,7 @@ void towire_u8_array(u8 **pptr UNNEEDED, const u8 *arr UNNEEDED, size_t num UNNE
 /* AUTOGENERATED MOCKS END */
 
 /* Stubs which do get called. */
-u8 *towire_hsm_sign_local_htlc_tx(const tal_t *ctx UNNEEDED, u64 commit_num UNNEEDED, const struct bitcoin_tx *tx UNNEEDED, const u8 *wscript UNNEEDED)
+u8 *towire_hsmd_sign_local_htlc_tx(const tal_t *ctx UNNEEDED, u64 commit_num UNNEEDED, const struct bitcoin_tx *tx UNNEEDED, const u8 *wscript UNNEEDED, bool option_anchor_outputs UNNEEDED)
 {
 	return NULL;
 }
@@ -306,8 +306,8 @@ bool wire_sync_write(int fd UNNEEDED, const void *msg TAKES UNNEEDED)
 	return true;
 }
 
-/* Generated stub for fromwire_hsm_sign_tx_reply */
-bool fromwire_hsm_sign_tx_reply(const void *p UNNEEDED, struct bitcoin_signature *sig)
+/* Generated stub for fromwire_hsmd_sign_tx_reply */
+bool fromwire_hsmd_sign_tx_reply(const void *p UNNEEDED, struct bitcoin_signature *sig)
 {
 	memset(sig, 0, sizeof(*sig));
 	return true;
@@ -344,9 +344,10 @@ struct bitcoin_tx *htlc_timeout_tx(const tal_t *ctx,
 				   u32 cltv_expiry,
 				   u16 to_self_delay UNNEEDED,
 				   u32 feerate_per_kw UNNEEDED,
-				   const struct keyset *keyset UNNEEDED)
+				   const struct keyset *keyset UNNEEDED,
+				   bool option_anchor_outputs)
 {
-	struct bitcoin_tx *tx;
+ 	struct bitcoin_tx *tx;
 	struct amount_sat in_amount;
 
 	tx = bitcoin_tx_from_hex(ctx, "0200000001a02a38c6ec5541963704a2a035b3094b18d69cc25cc7419d75e02894618329720000000000000000000191ea3000000000002200208bfadb3554f41cc06f00de0ec2e2f91e36ee45b5006a1f606146784755356ba532f10800",
@@ -354,7 +355,10 @@ struct bitcoin_tx *htlc_timeout_tx(const tal_t *ctx,
 	assert(tx);
 
 	in_amount = amount_msat_to_sat_round_down(htlc_msatoshi);
-	psbt_input_set_prev_utxo_wscript(tx->psbt, 0, commit_wscript, in_amount);
+	psbt_input_set_wit_utxo(tx->psbt, 0,
+				scriptpubkey_p2wsh(tx->psbt, commit_wscript),
+				in_amount);
+	psbt_input_set_witscript(tx->psbt, 0, commit_wscript);
 	tx->chainparams = chainparams;
 
 	bitcoin_tx_set_locktime(tx, cltv_expiry);

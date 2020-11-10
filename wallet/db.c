@@ -3,13 +3,15 @@
 #include <bitcoin/psbt.h>
 #include <bitcoin/script.h>
 #include <ccan/array_size/array_size.h>
+#include <ccan/mem/mem.h>
 #include <ccan/tal/str/str.h>
+#include <common/channel_id.h>
 #include <common/derive_basepoints.h>
 #include <common/key_derive.h>
 #include <common/node_id.h>
 #include <common/onionreply.h>
 #include <common/version.h>
-#include <hsmd/gen_hsm_wire.h>
+#include <hsmd/hsmd_wiregen.h>
 #include <inttypes.h>
 #include <lightningd/channel.h>
 #include <lightningd/lightningd.h>
@@ -39,6 +41,9 @@ static void migrate_last_tx_to_psbt(struct lightningd *ld, struct db *db,
 
 static void fillin_missing_scriptpubkeys(struct lightningd *ld, struct db *db,
 					 const struct ext_key *bip32_base);
+
+static void fillin_missing_channel_id(struct lightningd *ld, struct db *db,
+				      const struct ext_key *bip32_base);
 
 /* Do not reorder or remove elements from this array, it is used to
  * migrate existing databases from a previous state, based on the
@@ -633,6 +638,25 @@ static struct migration dbmigrations[] = {
     {NULL, migrate_last_tx_to_psbt},
     {SQL("ALTER TABLE outputs ADD reserved_til INTEGER DEFAULT NULL;"), NULL},
     {NULL, fillin_missing_scriptpubkeys},
+    /* option_anchor_outputs is nailed at creation time. */
+    {SQL("ALTER TABLE channels ADD COLUMN option_anchor_outputs INTEGER"
+	 " DEFAULT 0;"), NULL },
+    /* We need to know if it was option_anchor_outputs to spend to_remote */
+    {SQL("ALTER TABLE outputs ADD option_anchor_outputs INTEGER"
+	 " DEFAULT 0;"), NULL},
+    {SQL("ALTER TABLE channels ADD full_channel_id BLOB DEFAULT NULL;"), fillin_missing_channel_id},
+    {SQL("ALTER TABLE channels ADD funding_psbt BLOB DEFAULT NULL;"), NULL},
+    /* Channel closure reason */
+    {SQL("ALTER TABLE channels ADD closer INTEGER DEFAULT 2;"), NULL},
+    {SQL("ALTER TABLE channels ADD state_change_reason INTEGER DEFAULT 0;"), NULL},
+    {SQL("CREATE TABLE channel_state_changes ("
+	 "  channel_id BIGINT REFERENCES channels(id) ON DELETE CASCADE,"
+	 "  timestamp BIGINT,"
+	 "  old_state INTEGER,"
+	 "  new_state INTEGER,"
+	 "  cause INTEGER,"
+	 "  message TEXT"
+	 ");"), NULL},
 };
 
 /* Leak tracking. */
@@ -1181,14 +1205,14 @@ void fillin_missing_scriptpubkeys(struct lightningd *ld, struct db *db,
 				commitment_point = NULL;
 
 			/* Have to go ask the HSM to derive the pubkey for us */
-			msg = towire_hsm_get_output_scriptpubkey(NULL,
+			msg = towire_hsmd_get_output_scriptpubkey(NULL,
 								 channel_id,
 								 &peer_id,
 								 commitment_point);
 			if (!wire_sync_write(ld->hsm_fd, take(msg)))
 				fatal("Could not write to HSM: %s", strerror(errno));
 			msg = wire_sync_read(stmt, ld->hsm_fd);
-			if (!fromwire_hsm_get_output_scriptpubkey_reply(stmt, msg,
+			if (!fromwire_hsmd_get_output_scriptpubkey_reply(stmt, msg,
 									&scriptPubkey))
 				fatal("HSM gave bad hsm_get_output_scriptpubkey_reply %s",
 				      tal_hex(msg, msg));
@@ -1209,6 +1233,49 @@ void fillin_missing_scriptpubkeys(struct lightningd *ld, struct db *db,
 		db_bind_blob(update_stmt, 0, scriptPubkey, tal_bytelen(scriptPubkey));
 		db_bind_txid(update_stmt, 1, &txid);
 		db_bind_int(update_stmt, 2, outnum);
+		db_exec_prepared_v2(update_stmt);
+		tal_free(update_stmt);
+	}
+
+	tal_free(stmt);
+}
+
+/*
+ * V2 channel open has a different channel_id format than v1. prior to this, we
+ * could simply derive the channel_id whenever it was required, but since there
+ * are now two ways to do it, we save the derived channel id.
+ */
+static void fillin_missing_channel_id(struct lightningd *ld, struct db *db,
+				      const struct ext_key *bip32_base)
+{
+
+	struct db_stmt *stmt;
+
+	stmt = db_prepare_v2(db, SQL("SELECT"
+				     " id"
+				     ", funding_tx_id"
+				     ", funding_tx_outnum"
+				     " FROM channels;"));
+
+	db_query_prepared(stmt);
+	while (db_step(stmt)) {
+		struct db_stmt *update_stmt;
+		size_t id;
+		struct bitcoin_txid funding_txid;
+		struct channel_id cid;
+		u32 outnum;
+
+		id = db_column_u64(stmt, 0);
+		db_column_txid(stmt, 1, &funding_txid);
+		outnum = db_column_int(stmt, 2);
+		derive_channel_id(&cid, &funding_txid, outnum);
+
+		update_stmt = db_prepare_v2(db, SQL("UPDATE channels"
+						    " SET full_channel_id = ?"
+						    " WHERE id = ?;"));
+		db_bind_channel_id(update_stmt, 0, &cid);
+		db_bind_u64(update_stmt, 1, id);
+
 		db_exec_prepared_v2(update_stmt);
 		tal_free(update_stmt);
 	}
@@ -1267,18 +1334,19 @@ void migrate_last_tx_to_psbt(struct lightningd *ld, struct db *db,
 		funding_wscript = bitcoin_redeem_2of2(stmt, &local_funding_pubkey,
 						      &remote_funding_pubkey);
 
+
+		psbt_input_set_wit_utxo(last_tx->psbt, 0,
+					scriptpubkey_p2wsh(last_tx->psbt, funding_wscript),
+					funding_sat);
+		psbt_input_set_witscript(last_tx->psbt, 0, funding_wscript);
 		if (is_elements(chainparams)) {
 			/*FIXME: persist asset tags */
 			struct amount_asset asset;
 			asset = amount_sat_to_asset(&funding_sat,
 						    chainparams->fee_asset_tag);
-			psbt_elements_input_init_witness(last_tx->psbt,
-							 0, funding_wscript,
-							 &asset, NULL);
-		} else
-			psbt_input_set_prev_utxo_wscript(last_tx->psbt,
-							 0, funding_wscript,
-							 funding_sat);
+			psbt_elements_input_set_asset(last_tx->psbt, 0, &asset);
+		}
+
 
 		if (!db_column_signature(stmt, 5, &last_sig.s))
 			abort();
@@ -1313,12 +1381,14 @@ void db_bind_null(struct db_stmt *stmt, int pos)
 void db_bind_int(struct db_stmt *stmt, int pos, int val)
 {
 	assert(pos < tal_count(stmt->bindings));
+	memcheck(&val, sizeof(val));
 	stmt->bindings[pos].type = DB_BINDING_INT;
 	stmt->bindings[pos].v.i = val;
 }
 
 void db_bind_u64(struct db_stmt *stmt, int pos, u64 val)
 {
+	memcheck(&val, sizeof(val));
 	assert(pos < tal_count(stmt->bindings));
 	stmt->bindings[pos].type = DB_BINDING_UINT64;
 	stmt->bindings[pos].v.u64 = val;
@@ -1328,7 +1398,7 @@ void db_bind_blob(struct db_stmt *stmt, int pos, const u8 *val, size_t len)
 {
 	assert(pos < tal_count(stmt->bindings));
 	stmt->bindings[pos].type = DB_BINDING_BLOB;
-	stmt->bindings[pos].v.blob = val;
+	stmt->bindings[pos].v.blob = memcheck(val, len);
 	stmt->bindings[pos].len = len;
 }
 
@@ -1377,6 +1447,11 @@ void db_bind_txid(struct db_stmt *stmt, int pos, const struct bitcoin_txid *t)
 	db_bind_sha256d(stmt, pos, &t->shad);
 }
 
+void db_bind_channel_id(struct db_stmt *stmt, int pos, const struct channel_id *id)
+{
+	db_bind_blob(stmt, pos, id->id, sizeof(id->id));
+}
+
 void db_bind_node_id(struct db_stmt *stmt, int pos, const struct node_id *id)
 {
 	db_bind_blob(stmt, pos, id->k, sizeof(id->k));
@@ -1421,7 +1496,7 @@ void db_bind_short_channel_id_arr(struct db_stmt *stmt, int col,
 	for (size_t i = 0; i < num; ++i)
 		towire_short_channel_id(&ser, &id[i]);
 
-	db_bind_blob(stmt, col, ser, tal_count(ser));
+	db_bind_talarr(stmt, col, ser);
 }
 
 void db_bind_signature(struct db_stmt *stmt, int col,
@@ -1440,11 +1515,11 @@ void db_bind_timeabs(struct db_stmt *stmt, int col, struct timeabs t)
 	db_bind_u64(stmt, col, timestamp);
 }
 
-void db_bind_tx(struct db_stmt *stmt, int col, const struct bitcoin_tx *tx)
+void db_bind_tx(struct db_stmt *stmt, int col, const struct wally_tx *tx)
 {
-	u8 *ser = linearize_tx(stmt, tx);
+	u8 *ser = linearize_wtx(stmt, tx);
 	assert(ser);
-	db_bind_blob(stmt, col, ser, tal_count(ser));
+	db_bind_talarr(stmt, col, ser);
 }
 
 void db_bind_psbt(struct db_stmt *stmt, int col, const struct wally_psbt *psbt)
@@ -1475,7 +1550,15 @@ void db_bind_json_escape(struct db_stmt *stmt, int pos,
 
 void db_bind_onionreply(struct db_stmt *stmt, int pos, const struct onionreply *r)
 {
-	db_bind_blob(stmt, pos, r->contents, tal_bytelen(r->contents));
+	db_bind_talarr(stmt, pos, r->contents);
+}
+
+void db_bind_talarr(struct db_stmt *stmt, int col, const u8 *arr)
+{
+	if (!arr)
+		db_bind_null(stmt, col);
+	else
+		db_bind_blob(stmt, col, arr, tal_bytelen(arr));
 }
 
 void db_column_preimage(struct db_stmt *stmt, int col,
@@ -1488,11 +1571,16 @@ void db_column_preimage(struct db_stmt *stmt, int col,
 	memcpy(preimage, raw, size);
 }
 
+void db_column_channel_id(struct db_stmt *stmt, int col, struct channel_id *dest)
+{
+	assert(db_column_bytes(stmt, col) == sizeof(dest->id));
+	memcpy(dest->id, db_column_blob(stmt, col), sizeof(dest->id));
+}
+
 void db_column_node_id(struct db_stmt *stmt, int col, struct node_id *dest)
 {
 	assert(db_column_bytes(stmt, col) == sizeof(dest->k));
 	memcpy(dest->k, db_column_blob(stmt, col), sizeof(dest->k));
-	assert(node_id_valid(dest));
 }
 
 struct node_id *db_column_node_id_arr(const tal_t *ctx, struct db_stmt *stmt,
@@ -1504,11 +1592,8 @@ struct node_id *db_column_node_id_arr(const tal_t *ctx, struct db_stmt *stmt,
 	assert(n * sizeof(ret->k) == (size_t)db_column_bytes(stmt, col));
 	ret = tal_arr(ctx, struct node_id, n);
 
-	for (size_t i = 0; i < n; i++) {
+	for (size_t i = 0; i < n; i++)
 		memcpy(ret[i].k, arr + i * sizeof(ret[i].k), sizeof(ret[i].k));
-		if (!node_id_valid(&ret[i]))
-			return tal_free(ret);
-	}
 
 	return ret;
 }
@@ -1574,12 +1659,16 @@ struct bitcoin_tx *db_column_tx(const tal_t *ctx, struct db_stmt *stmt, int col)
 	return pull_bitcoin_tx(ctx, &src, &len);
 }
 
-struct bitcoin_tx *db_column_psbt_to_tx(const tal_t *ctx, struct db_stmt *stmt, int col)
+struct wally_psbt *db_column_psbt(const tal_t *ctx, struct db_stmt *stmt, int col)
 {
-	struct wally_psbt *psbt;
 	const u8 *src = db_column_blob(stmt, col);
 	size_t len = db_column_bytes(stmt, col);
-	psbt = psbt_from_bytes(ctx, src, len);
+	return psbt_from_bytes(ctx, src, len);
+}
+
+struct bitcoin_tx *db_column_psbt_to_tx(const tal_t *ctx, struct db_stmt *stmt, int col)
+{
+	struct wally_psbt *psbt = db_column_psbt(ctx, stmt, col);
 	if (!psbt)
 		return NULL;
 	return bitcoin_tx_with_psbt(ctx, psbt);
@@ -1679,6 +1768,15 @@ struct onionreply *db_column_onionreply(const tal_t *ctx,
 				  db_column_blob(stmt, col),
 				  db_column_bytes(stmt, col), 0);
 	return r;
+}
+
+u8 *db_column_talarr(const tal_t *ctx, struct db_stmt *stmt, int col)
+{
+	if (db_column_is_null(stmt, col))
+		return NULL;
+	return tal_dup_arr(ctx, u8,
+			   db_column_blob(stmt, col),
+			   db_column_bytes(stmt, col), 0);
 }
 
 bool db_exec_prepared_v2(struct db_stmt *stmt TAKES)

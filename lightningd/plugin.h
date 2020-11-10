@@ -50,12 +50,17 @@ struct plugin {
 
 	enum plugin_state plugin_state;
 
+	/* Our unique index, which is default hook ordering. */
+	u64 index;
+
 	/* If this plugin can be restarted without restarting lightningd */
 	bool dynamic;
 
 	/* Stuff we read */
 	char *buffer;
 	size_t used, len_read;
+	jsmn_parser parser;
+	jsmntok_t *toks;
 
 	/* Our json_streams. Since multiple streams could start
 	 * returning data at once, we always service these in order,
@@ -111,6 +116,9 @@ struct plugins {
 	/* Whether we are shutting down (`plugins_free` is called) */
 	bool shutdown;
 
+	/* Index to show what order they were added in */
+	u64 plugin_idx;
+
 #if DEVELOPER
 	/* Whether builtin plugins should be overridden as unimportant.  */
 	bool dev_builtin_plugins_unimportant;
@@ -137,6 +145,7 @@ struct plugin_opt {
 	const char *type;
 	const char *description;
 	struct plugin_opt_value *value;
+	bool deprecated;
 };
 
 /**

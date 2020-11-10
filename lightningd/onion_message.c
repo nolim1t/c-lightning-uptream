@@ -1,4 +1,4 @@
-#include <channeld/gen_channel_wire.h>
+#include <channeld/channeld_wiregen.h>
 #include <common/json_helpers.h>
 #include <lightningd/channel.h>
 #include <lightningd/lightningd.h>
@@ -63,13 +63,13 @@ static bool make_peer_send(struct lightningd *ld,
 
 	if (!dst) {
 		log_debug(ld->log, "Can't send %s: no channel",
-			  channel_wire_type_name(fromwire_peektype(msg)));
+			  channeld_wire_name(fromwire_peektype(msg)));
 		return false;
 	}
 
 	if (!dst->owner) {
 		log_debug(ld->log, "Can't send %s: not connected",
-			  channel_wire_type_name(fromwire_peektype(msg)));
+			  channeld_wire_name(fromwire_peektype(msg)));
 		return false;
 	}
 
@@ -77,7 +77,7 @@ static bool make_peer_send(struct lightningd *ld,
 	 * allow incoming via openingd!. */
 	if (!streq(dst->owner->name, "channeld")) {
 		log_debug(ld->log, "Can't send %s: owned by %s",
-			  channel_wire_type_name(fromwire_peektype(msg)),
+			  channeld_wire_name(fromwire_peektype(msg)),
 			  dst->owner->name);
 		return false;
 	}
@@ -240,8 +240,8 @@ static struct command_result *param_reply_path(struct command *cmd,
 		return command_fail(cmd, JSONRPC2_INVALID_PARAMS,
 				    "%s has no 'blinding'", name);
 	if (!json_to_pubkey(buffer, tblinding, &(*reply_path)->blinding))
-		return command_fail(cmd, JSONRPC2_INVALID_PARAMS,
-				    "%s 'blinding' invalid pubkey", name);
+		return command_fail_badparam(cmd, name, buffer, tblinding,
+					     "'blinding' should be valid pubkey");
 
 	tpath = json_get_member(buffer, tok, "path");
 	if (!tpath || tpath->type != JSMN_ARRAY)

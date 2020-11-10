@@ -1,37 +1,38 @@
 #! /usr/bin/make
 
-# Designed to be run one level up
-opening-wrongdir:
-	$(MAKE) -C ../.. opening-all
+OPENINGD_HEADERS := 				\
+	openingd/common.h			\
+	openingd/openingd_wiregen.h
 
-default: opening-all
+DUALOPEND_HEADERS := 				\
+	openingd/common.h			\
+	openingd/dualopend_wiregen.h
 
-opening-all: lightningd/lightning_openingd
+OPENINGD_SRC := openingd/openingd.c		\
+	$(OPENINGD_HEADERS:.h=.c)
 
-# opening needs these:
-LIGHTNINGD_OPENING_HEADERS_GEN :=			\
-	openingd/gen_opening_wire.h
+DUALOPEND_SRC := openingd/dualopend.c		\
+	$(DUALOPEND_HEADERS:.h=.c)
 
-LIGHTNINGD_OPENING_HEADERS_NOGEN :=
+OPENINGD_OBJS := $(OPENINGD_SRC:.c=.o)
+$(OPENINGD_OBJS): $(OPENINGD_HEADERS)
 
-LIGHTNINGD_OPENING_HEADERS := $(LIGHTNINGD_OPENING_HEADERS_GEN) $(LIGHTNINGD_OPENING_HEADERS_NOGEN)
+DUALOPEND_OBJS := $(DUALOPEND_SRC:.c=.o)
+$(DUALOPEND_OBJS): $(DUALOPEND_HEADERS)
 
-LIGHTNINGD_OPENING_SRC := openingd/openingd.c	\
-	$(LIGHTNINGD_OPENING_HEADERS:.h=.c)
-LIGHTNINGD_OPENING_OBJS := $(LIGHTNINGD_OPENING_SRC:.c=.o)
+# Make sure these depend on everything.
+ALL_C_SOURCES += $(OPENINGD_SRC) $(DUALOPEND_SRC)
+ALL_C_HEADERS += $(OPENINGD_HEADERS) $(DUALOPEND_HEADERS)
+ALL_PROGRAMS += lightningd/lightning_openingd
 
-# Control daemon uses this:
-LIGHTNINGD_OPENING_CONTROL_HEADERS := $(LIGHTNINGD_OPENING_HEADERS)
-LIGHTNINGD_OPENING_CONTROL_SRC := $(LIGHTNINGD_OPENING_HEADERS:.h=.c)
-LIGHTNINGD_OPENING_CONTROL_OBJS := $(LIGHTNINGD_OPENING_CONTROL_SRC:.c=.o)
+# Only build dualopend if experimental features is on
+ifeq ($(EXPERIMENTAL_FEATURES),1)
+ALL_PROGRAMS += lightningd/lightning_dualopend
+endif
 
-LIGHTNINGD_OPENING_GEN_SRC := $(filter openingd/gen_%, $(LIGHTNINGD_OPENING_SRC) $(LIGHTNINGD_OPENING_CONTROL_SRC))
-
-LIGHTNINGD_OPENING_SRC_NOGEN := $(filter-out openingd/gen_%, $(LIGHTNINGD_OPENING_SRC))
-
-# Add to headers which any object might need.
-LIGHTNINGD_HEADERS_GEN += $(LIGHTNINGD_OPENING_HEADERS_GEN)
-LIGHTNINGD_HEADERS_NOGEN += $(LIGHTNINGD_OPENING_HEADERS_NOGEN)
+# Here's what lightningd depends on
+LIGHTNINGD_CONTROL_HEADERS += openingd/openingd_wiregen.h openingd/dualopend_wiregen.h
+LIGHTNINGD_CONTROL_OBJS += openingd/openingd_wiregen.o openingd/dualopend_wiregen.o
 
 # Common source we use.
 OPENINGD_COMMON_OBJS :=				\
@@ -50,9 +51,8 @@ OPENINGD_COMMON_OBJS :=				\
 	common/dev_disconnect.o			\
 	common/features.o			\
 	common/fee_states.o			\
-	common/funding_tx.o			\
-	common/gen_status_wire.o		\
-	common/gen_peer_status_wire.o		\
+	common/status_wiregen.o			\
+	common/peer_status_wiregen.o		\
 	common/gossip_rcvd_filter.o		\
 	common/gossip_store.o			\
 	common/htlc_state.o			\
@@ -70,6 +70,7 @@ OPENINGD_COMMON_OBJS :=				\
 	common/peer_billboard.o			\
 	common/peer_failed.o			\
 	common/permute_tx.o			\
+	common/psbt_open.o			\
 	common/pseudorand.o			\
 	common/read_peer_msg.o			\
 	common/setup.o				\
@@ -82,35 +83,11 @@ OPENINGD_COMMON_OBJS :=				\
 	common/version.o			\
 	common/wire_error.o			\
 	common/wireaddr.o			\
-	gossipd/gen_gossip_peerd_wire.o		\
-	hsmd/gen_hsm_wire.o			\
+	gossipd/gossipd_peerd_wiregen.o		\
 	lightningd/gossip_msg.o
 
-$(LIGHTNINGD_OPENING_OBJS): $(LIGHTNINGD_HEADERS)
+lightningd/lightning_openingd: $(OPENINGD_OBJS) $(OPENINGD_COMMON_OBJS) $(WIRE_OBJS) $(BITCOIN_OBJS) $(HSMD_CLIENT_OBJS)
 
-openingd/gen_opening_wire.h: $(WIRE_GEN) openingd/opening_wire.csv
-	$(WIRE_GEN) --page header $@ opening_wire_type < openingd/opening_wire.csv > $@
-
-openingd/gen_opening_wire.c: $(WIRE_GEN) openingd/opening_wire.csv
-	$(WIRE_GEN) --page impl ${@:.c=.h} opening_wire_type < openingd/opening_wire.csv > $@
-
-LIGHTNINGD_OPENING_OBJS := $(LIGHTNINGD_OPENING_SRC:.c=.o) $(LIGHTNINGD_OPENING_GEN_SRC:.c=.o)
-
-# Make sure these depend on everything.
-ALL_OBJS += $(LIGHTNINGD_OPENING_OBJS)
-ALL_PROGRAMS += lightningd/lightning_openingd
-ALL_GEN_HEADERS += $(LIGHTNINGD_OPENING_HEADERS_GEN)
-
-lightningd/lightning_openingd: $(LIGHTNINGD_OPENING_OBJS) $(OPENINGD_COMMON_OBJS) $(WIRE_OBJS) $(BITCOIN_OBJS) $(LIGHTNINGD_HSM_CLIENT_OBJS)
-
-check-source: $(LIGHTNINGD_OPENING_SRC_NOGEN:%=check-src-include-order/%)
-check-source-bolt: $(LIGHTNINGD_OPENING_SRC:%=bolt-check/%) $(LIGHTNINGD_OPENING_HEADERS:%=bolt-check/%)
-
-check-whitespace: $(LIGHTNINGD_OPENING_SRC_NOGEN:%=check-whitespace/%) $(LIGHTNINGD_OPENING_HEADERS_NOGEN:%=check-whitespace/%)
-
-clean: opening-clean
-
-opening-clean:
-	$(RM) $(LIGHTNINGD_OPENING_OBJS) openingd/gen_*
+lightningd/lightning_dualopend: $(DUALOPEND_OBJS) $(OPENINGD_COMMON_OBJS) $(WIRE_OBJS) $(BITCOIN_OBJS) $(HSMD_CLIENT_OBJS)
 
 -include openingd/test/Makefile

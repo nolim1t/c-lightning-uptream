@@ -12,7 +12,6 @@
 #include <common/features.h>
 #include <common/utils.h>
 #include <errno.h>
-#include <hsmd/gen_hsm_wire.h>
 #include <inttypes.h>
 #include <lightningd/hsm_control.h>
 #include <lightningd/jsonrpc.h>
@@ -248,9 +247,8 @@ static char *decode_x(struct bolt11 *b11,
 /* BOLT #11:
  *
  * `c` (24): `data_length` variable.  `min_final_cltv_expiry` to use for the
- * last HTLC in the route. Default is 9 if not specified.
+ * last HTLC in the route. Default is 18 if not specified.
  */
-#define DEFAULT_C 9
 static char *decode_c(struct bolt11 *b11,
 		      struct hash_u5 *hu5,
 		      u5 **data, size_t *data_len,
@@ -536,7 +534,11 @@ struct bolt11 *new_bolt11(const tal_t *ctx,
 	b11->msat = NULL;
 	b11->expiry = DEFAULT_X;
 	b11->features = tal_arr(b11, u8, 0);
-	b11->min_final_cltv_expiry = DEFAULT_C;
+	/* BOLT #11:
+	 *   - if the `c` field (`min_final_cltv_expiry`) is not provided:
+	 *     - MUST use an expiry delta of at least 18 when making the payment
+	 */
+	b11->min_final_cltv_expiry = 18;
 	b11->payment_secret = NULL;
 
 	if (msat)
@@ -547,7 +549,9 @@ struct bolt11 *new_bolt11(const tal_t *ctx,
 /* Decodes and checks signature; returns NULL on error. */
 struct bolt11 *bolt11_decode(const tal_t *ctx, const char *str,
 			     const struct feature_set *our_features,
-			     const char *description, char **fail)
+			     const char *description,
+			     const struct chainparams *must_be_chain,
+			     char **fail)
 {
 	char *hrp, *amountstr, *prefix;
 	u5 *data;
@@ -600,9 +604,21 @@ struct bolt11 *bolt11_decode(const tal_t *ctx, const char *str,
 		return decode_fail(b11, fail,
 				   "Prefix '%s' does not start with ln", prefix);
 
-	b11->chain = chainparams_by_bip173(prefix + 2);
-	if (!b11->chain)
-		return decode_fail(b11, fail, "Unknown chain %s", prefix + 2);
+	/* Signet chose to use prefix 'tb', just like testnet.  So we tread
+	 * carefully here: */
+	if (must_be_chain) {
+		if (streq(prefix + 2, must_be_chain->bip173_name))
+			b11->chain = must_be_chain;
+		else
+			return decode_fail(b11, fail, "Prefix %s is not for %s",
+					   prefix + 2,
+					   must_be_chain->network_name);
+	} else {
+		b11->chain = chainparams_by_bip173(prefix + 2);
+		if (!b11->chain)
+			return decode_fail(b11, fail, "Unknown chain %s",
+					   prefix + 2);
+	}
 
 	/* BOLT #11:
 	 *
@@ -651,7 +667,7 @@ struct bolt11 *bolt11_decode(const tal_t *ctx, const char *str,
 		 * amount required for payment.
 		*/
 		b11->msat = tal(b11, struct amount_msat);
-		/* BOLT-50143e388e16a449a92ed574fc16eb35b51426b9 #11:
+		/* BOLT #11:
 		 *
 		 * - if multiplier is `p` and the last decimal of `amount` is
 		 *   not 0:
@@ -861,8 +877,8 @@ static void push_field(u5 **data, char type, const void *src, size_t nbits)
  *
  * - if `x` is included:
  *   - SHOULD use the minimum `data_length` possible.
+ * - MUST include one `c` field (`min_final_cltv_expiry`).
  *...
- *  - if `c` is included:
  *   - SHOULD use the minimum `data_length` possible.
  */
 static void push_varlen_field(u5 **data, char type, u64 val)
@@ -1095,8 +1111,10 @@ char *bolt11_encode_(const tal_t *ctx,
 	if (b11->expiry != DEFAULT_X)
 		encode_x(&data, b11->expiry);
 
-	if (b11->min_final_cltv_expiry != DEFAULT_C)
-		encode_c(&data, b11->min_final_cltv_expiry);
+	/* BOLT #11:
+	 *   - MUST include one `c` field (`min_final_cltv_expiry`).
+	 */
+	encode_c(&data, b11->min_final_cltv_expiry);
 
 	if (b11->payment_secret)
 		encode_s(&data, b11->payment_secret);

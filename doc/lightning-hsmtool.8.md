@@ -48,6 +48,9 @@ and is usually no greater than the number of channels that the node has
 ever had.
 Specify *password* if the `hsm_secret` is encrypted.
 
+**generatehsm** *hsm\_secret\_path*
+Generates a new hsm_secret using BIP39.
+
 BUGS
 ----
 
@@ -76,3 +79,4 @@ COPYING
 Note: the modules in the ccan/ directory have their own licenses, but
 the rest of the code is covered by the BSD-style MIT license.
 Main web site: <https://github.com/ElementsProject/lightning>
+

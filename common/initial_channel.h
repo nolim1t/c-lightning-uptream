@@ -10,6 +10,7 @@
 #include <ccan/tal/tal.h>
 #include <common/amount.h>
 #include <common/channel_config.h>
+#include <common/channel_id.h>
 #include <common/derive_basepoints.h>
 #include <common/htlc.h>
 #include <stdbool.h>
@@ -26,6 +27,10 @@ struct channel_view {
 };
 
 struct channel {
+
+	/* The id for this channel */
+	struct channel_id cid;
+
 	/* Funding txid and output. */
 	struct bitcoin_txid funding_txid;
 	unsigned int funding_txout;
@@ -62,11 +67,15 @@ struct channel {
 
 	/* Is this using option_static_remotekey? */
 	bool option_static_remotekey;
+
+	/* Is this using option_anchor_outputs? */
+	bool option_anchor_outputs;
 };
 
 /**
  * new_initial_channel: Given initial fees and funding, what is initial state?
  * @ctx: tal context to allocate return value from.
+ * @cid: The channel's id.
  * @funding_txid: The commitment transaction id.
  * @funding_txout: The commitment transaction output number.
  * @minimum_depth: The minimum confirmations needed for funding transaction.
@@ -79,11 +88,14 @@ struct channel {
  * @remote_basepoints: remote basepoints.
  * @local_fundingkey: local funding key
  * @remote_fundingkey: remote funding key
+ * @option_static_remotekey: was this created with option_static_remotekey?
+ * @option_anchor_outputs: was this created with option_anchor_outputs?
  * @opener: which side initiated it.
  *
  * Returns channel, or NULL if malformed.
  */
 struct channel *new_initial_channel(const tal_t *ctx,
+				    const struct channel_id *cid,
 				    const struct bitcoin_txid *funding_txid,
 				    unsigned int funding_txout,
 				    u32 minimum_depth,
@@ -97,8 +109,8 @@ struct channel *new_initial_channel(const tal_t *ctx,
 				    const struct pubkey *local_funding_pubkey,
 				    const struct pubkey *remote_funding_pubkey,
 				    bool option_static_remotekey,
+				    bool option_anchor_outputs,
 				    enum side opener);
-
 
 /**
  * initial_channel_tx: Get the current commitment tx for the *empty* channel.

@@ -22,10 +22,10 @@ COMMON_SRC_NOGEN :=				\
 	common/decode_array.c			\
 	common/derive_basepoints.c		\
 	common/dev_disconnect.c			\
+	common/dijkstra.c			\
 	common/ecdh_hsmd.c			\
 	common/features.c			\
 	common/fee_states.c			\
-	common/funding_tx.c			\
 	common/gossip_rcvd_filter.c		\
 	common/gossip_store.c			\
 	common/hash_u5.c			\
@@ -43,6 +43,7 @@ COMMON_SRC_NOGEN :=				\
 	common/json_tok.c			\
 	common/key_derive.c			\
 	common/keyset.c				\
+	common/gossmap.c			\
 	common/memleak.c			\
 	common/msg_queue.c			\
 	common/node_id.c			\
@@ -55,12 +56,17 @@ COMMON_SRC_NOGEN :=				\
 	common/peer_failed.c			\
 	common/permute_tx.c			\
 	common/ping.c				\
+	common/psbt_open.c			\
+	common/private_channel_announcement.c	\
 	common/pseudorand.c			\
+	common/random_select.c			\
 	common/read_peer_msg.c			\
+	common/route.c				\
 	common/setup.c				\
 	common/socket_close.c			\
 	common/sphinx.c				\
 	common/status.c				\
+	common/status_levels.c			\
 	common/status_wire.c			\
 	common/subdaemon.c			\
 	common/timeout.c			\
@@ -69,12 +75,15 @@ COMMON_SRC_NOGEN :=				\
 	common/utxo.c				\
 	common/version.c			\
 	common/wallet.c				\
-	common/wallet_tx.c			\
 	common/wireaddr.c			\
-	common/wire_error.c			\
-	common/withdraw_tx.c
+	common/wire_error.c
 
-COMMON_SRC_GEN := common/gen_status_wire.c common/gen_peer_status_wire.c
+
+ifeq ($(EXPERIMENTAL_FEATURES),1)
+COMMON_SRC_NOGEN += common/psbt_internal.c
+endif
+
+COMMON_SRC_GEN := common/status_wiregen.c common/peer_status_wiregen.c
 
 COMMON_HEADERS_NOGEN := $(COMMON_SRC_NOGEN:.c=.h)	\
 	common/closing_fee.h				\
@@ -85,8 +94,9 @@ COMMON_HEADERS_NOGEN := $(COMMON_SRC_NOGEN:.c=.h)	\
 	common/json_command.h				\
 	common/jsonrpc_errors.h				\
 	common/overflows.h				\
-	common/status_levels.h
-COMMON_HEADERS_GEN := common/gen_htlc_state_names.h common/gen_status_wire.h common/gen_peer_status_wire.h
+	common/tx_roles.h
+
+COMMON_HEADERS_GEN := common/htlc_state_names_gen.h common/status_wiregen.h common/peer_status_wiregen.h
 
 COMMON_HEADERS := $(COMMON_HEADERS_GEN) $(COMMON_HEADERS_NOGEN)
 COMMON_SRC := $(COMMON_SRC_NOGEN) $(COMMON_SRC_GEN)
@@ -97,36 +107,18 @@ COMMON_OBJS := $(COMMON_SRC:.c=.o)
 $(COMMON_OBJS): $(CCAN_HEADERS) $(BITCOIN_HEADERS) $(EXTERNAL_HEADERS) $(COMMON_HEADERS_GEN)
 
 # Only common/version.c can include this header.
-common/version.o: gen_version.h
+common/version.o: version_gen.h
 
-ALL_GEN_HEADERS += $(COMMON_HEADERS_GEN)
-ALL_OBJS += $(COMMON_OBJS)
+ALL_C_HEADERS += $(COMMON_HEADERS)
+ALL_C_SOURCES += $(COMMON_SRC)
 
-common/gen_htlc_state_names.h: common/htlc_state.h ccan/ccan/cdump/tools/cdump-enumstr
+common/htlc_state_names_gen.h: common/htlc_state.h ccan/ccan/cdump/tools/cdump-enumstr
 	ccan/ccan/cdump/tools/cdump-enumstr common/htlc_state.h > $@
 
-common/gen_status_wire.h: $(WIRE_GEN) common/status_wire.csv
-	$(WIRE_GEN) --page header $@ status < common/status_wire.csv > $@
-
-common/gen_status_wire.c: $(WIRE_GEN) common/status_wire.csv
-	$(WIRE_GEN) --page impl ${@:.c=.h} status < common/status_wire.csv > $@
-
-common/gen_peer_status_wire.h: $(WIRE_GEN) common/peer_status_wire.csv
-	$(WIRE_GEN) --page header $@ peer_status < common/peer_status_wire.csv > $@
-
-common/gen_peer_status_wire.c: $(WIRE_GEN) common/peer_status_wire.csv
-	$(WIRE_GEN) --page impl ${@:.c=.h} peer_status < common/peer_status_wire.csv > $@
-
-check-makefile: check-common-makefile
-
-check-common-makefile:
-	if [ x"`LC_ALL=C ls common/*.h | grep -v ^common/gen_`" != x"`echo $(COMMON_HEADERS_NOGEN) | tr ' ' '\n' | LC_ALL=C sort`" ]; then echo COMMON_HEADERS_NOGEN incorrect; exit 1; fi
+common/gossip_store.o: gossipd/gossip_store_wiregen.h
 
 check-source-bolt: $(COMMON_SRC_NOGEN:%=bolt-check/%) $(COMMON_HEADERS:%=bolt-check/%)
 check-whitespace: $(COMMON_SRC_NOGEN:%=check-whitespace/%) $(COMMON_HEADERS:%=check-whitespace/%)
-
-check-source: $(COMMON_SRC_NOGEN:%=check-src-include-order/%)		\
-	$(COMMON_HEADERS_NOGEN:%=check-hdr-include-order/%)
 
 clean: common-clean
 

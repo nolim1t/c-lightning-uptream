@@ -9,6 +9,7 @@
 #include <ccan/tal/tal.h>
 #include <common/decode_array.h>
 #include <common/pseudorand.h>
+#include <common/random_select.h>
 #include <common/status.h>
 #include <common/timeout.h>
 #include <common/type_to_string.h>
@@ -16,7 +17,7 @@
 #include <gossipd/queries.h>
 #include <gossipd/routing.h>
 #include <gossipd/seeker.h>
-#include <wire/gen_peer_wire.h>
+#include <wire/peer_wire.h>
 
 #define GOSSIP_SEEKER_INTERVAL(seeker) \
 	DEV_FAST_GOSSIP((seeker)->daemon->rstate->dev_fast_gossip, 5, 60)
@@ -295,7 +296,7 @@ static bool peer_has_gossip_queries(const struct peer *peer)
 static bool peer_can_take_range_query(const struct peer *peer)
 {
 	return peer->gossip_queries_feature
-		&& !peer->query_channel_blocks;
+		&& !peer->range_replies;
 }
 
 static bool peer_can_take_scid_query(const struct peer *peer)
@@ -454,7 +455,7 @@ static bool get_unannounced_nodes(const tal_t *ctx,
 {
 	size_t num = 0;
 	u64 offset;
-	u64 threshold = pseudorand_u64();
+	double total_weight = 0.0;
 
 	/* Pick an example short_channel_id at random to query.  As a
 	 * side-effect this gets the node. */
@@ -475,11 +476,8 @@ static bool get_unannounced_nodes(const tal_t *ctx,
 			(*scids)[num++] = c->scid;
 		} else {
 			/* Maybe replace one: approx. reservoir sampling */
-			u64 p = pseudorand_u64();
-			if (p > threshold) {
+			if (random_select(1.0, &total_weight))
 				(*scids)[pseudorand(max)] = c->scid;
-				threshold = p;
-			}
 		}
 	}
 
@@ -645,8 +643,7 @@ static void check_timestamps(struct seeker *seeker,
 
 static void process_scid_probe(struct peer *peer,
 			       u32 first_blocknum, u32 number_of_blocks,
-			       const struct short_channel_id *scids,
-			       const struct channel_update_timestamps *ts,
+			       const struct range_query_reply *replies,
 			       bool complete)
 {
 	struct seeker *seeker = peer->daemon->seeker;
@@ -658,15 +655,16 @@ static void process_scid_probe(struct peer *peer,
 
 	clear_softref(seeker, &seeker->random_peer_softref);
 
-	for (size_t i = 0; i < tal_count(scids); i++) {
-		struct chan *c = get_channel(seeker->daemon->rstate, &scids[i]);
+	for (size_t i = 0; i < tal_count(replies); i++) {
+		struct chan *c = get_channel(seeker->daemon->rstate,
+					     &replies[i].scid);
 		if (c) {
-			if (ts)
-				check_timestamps(seeker, c, ts+i, peer);
+			check_timestamps(seeker, c, &replies[i].ts, peer);
 			continue;
 		}
 
-		new_unknown_scids |= add_unknown_scid(seeker, &scids[i], peer);
+		new_unknown_scids |= add_unknown_scid(seeker, &replies[i].scid,
+						      peer);
 	}
 
 	/* No new unknown scids, or no more to ask?  We give some wiggle

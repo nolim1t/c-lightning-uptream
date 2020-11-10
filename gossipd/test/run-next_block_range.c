@@ -16,12 +16,6 @@ void json_add_member(struct json_stream *js UNNEEDED,
 		     bool quote UNNEEDED,
 		     const char *fmt UNNEEDED, ...)
 { fprintf(stderr, "json_add_member called!\n"); abort(); }
-/* Generated stub for json_array_end */
-void json_array_end(struct json_stream *js UNNEEDED)
-{ fprintf(stderr, "json_array_end called!\n"); abort(); }
-/* Generated stub for json_array_start */
-void json_array_start(struct json_stream *js UNNEEDED, const char *fieldname UNNEEDED)
-{ fprintf(stderr, "json_array_start called!\n"); abort(); }
 /* Generated stub for json_member_direct */
 char *json_member_direct(struct json_stream *js UNNEEDED,
 			 const char *fieldname UNNEEDED, size_t extra UNNEEDED)
@@ -45,8 +39,7 @@ bool query_channel_range(struct daemon *daemon UNNEEDED,
 			 enum query_option_flags qflags UNNEEDED,
 			 void (*cb)(struct peer *peer UNNEEDED,
 				    u32 first_blocknum UNNEEDED, u32 number_of_blocks UNNEEDED,
-				    const struct short_channel_id *scids UNNEEDED,
-				    const struct channel_update_timestamps * UNNEEDED,
+				    const struct range_query_reply *replies UNNEEDED,
 				    bool complete))
 { fprintf(stderr, "query_channel_range called!\n"); abort(); }
 /* Generated stub for query_short_channel_ids */
@@ -63,6 +56,9 @@ void queue_peer_msg(struct peer *peer UNNEEDED, const u8 *msg TAKES UNNEEDED)
 struct peer *random_peer(struct daemon *daemon UNNEEDED,
 			 bool (*check_peer)(const struct peer *peer))
 { fprintf(stderr, "random_peer called!\n"); abort(); }
+/* Generated stub for random_select */
+bool random_select(double weight UNNEEDED, double *tot_weight UNNEEDED)
+{ fprintf(stderr, "random_select called!\n"); abort(); }
 /* Generated stub for status_failed */
 void status_failed(enum status_failreason code UNNEEDED,
 		   const char *fmt UNNEEDED, ...)

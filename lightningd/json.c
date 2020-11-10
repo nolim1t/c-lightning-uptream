@@ -31,10 +31,8 @@ struct command_result *param_pubkey(struct command *cmd, const char *name,
 	if (json_to_pubkey(buffer, tok, *pubkey))
 		return NULL;
 
-	return command_fail(cmd, JSONRPC2_INVALID_PARAMS,
-			    "'%s' should be a pubkey, not '%.*s'",
-			    name, json_tok_full_len(tok),
-			    json_tok_full(buffer, tok));
+	return command_fail_badparam(cmd, name, buffer, tok,
+				     "should be a compressed pubkey");
 }
 
 struct command_result *param_short_channel_id(struct command *cmd,
@@ -47,10 +45,8 @@ struct command_result *param_short_channel_id(struct command *cmd,
 	if (json_to_short_channel_id(buffer, tok, *scid))
 		return NULL;
 
-	return command_fail(cmd, JSONRPC2_INVALID_PARAMS,
-			    "'%s' should be a short channel id, not '%.*s'",
-			    name, json_tok_full_len(tok),
-			    json_tok_full(buffer, tok));
+	return command_fail_badparam(cmd, name, buffer, tok,
+				     "should be a short_channel_id of form NxNxN");
 }
 
 struct command_result *param_feerate_style(struct command *cmd,
@@ -106,30 +102,4 @@ json_tok_channel_id(const char *buffer, const jsmntok_t *tok,
 {
 	return hex_decode(buffer + tok->start, tok->end - tok->start,
 			  cid, sizeof(*cid));
-}
-
-struct command_result *param_bitcoin_address(struct command *cmd,
-					     const char *name,
-					     const char *buffer,
-					     const jsmntok_t *tok,
-					     const u8 **scriptpubkey)
-{
-	/* Parse address. */
-	switch (json_to_address_scriptpubkey(cmd,
-					     chainparams,
-					     buffer, tok,
-					     scriptpubkey)) {
-	case ADDRESS_PARSE_UNRECOGNIZED:
-		return command_fail(cmd, LIGHTNINGD,
-				    "Could not parse destination address, "
-				    "%s should be a valid address",
-				    name ? name : "address field");
-	case ADDRESS_PARSE_WRONG_NETWORK:
-		return command_fail(cmd, LIGHTNINGD,
-				    "Destination address is not on network %s",
-				    chainparams->network_name);
-	case ADDRESS_PARSE_SUCCESS:
-		return NULL;
-	}
-	abort();
 }

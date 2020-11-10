@@ -12,12 +12,13 @@
 #include <bitcoin/script.h>
 #include <bitcoin/tx.h>
 #include <ccan/cast/cast.h>
-#include <ccan/opt/opt.h>
 #include <ccan/err/err.h>
+#include <ccan/opt/opt.h>
 #include <ccan/str/hex/hex.h>
 #include <ccan/tal/str/str.h>
 #include <channeld/full_channel.h>
 #include <common/amount.h>
+#include <common/channel_id.h>
 #include <common/derive_basepoints.h>
 #include <common/fee_states.h>
 #include <common/htlc_wire.h>
@@ -250,6 +251,7 @@ int main(int argc, char *argv[])
 	struct pubkey funding_localkey, funding_remotekey;
 	u64 commitnum;
 	struct amount_sat funding_amount;
+	struct channel_id cid;
 	struct bitcoin_txid funding_txid;
 	unsigned int funding_outnum;
 	u32 feerate_per_kw;
@@ -267,7 +269,7 @@ int main(int argc, char *argv[])
 	const struct htlc **htlcmap;
 	struct privkey local_htlc_privkey, remote_htlc_privkey;
 	struct pubkey local_htlc_pubkey, remote_htlc_pubkey;
-	bool option_static_remotekey = false;
+	bool option_static_remotekey = false, option_anchor_outputs = false;
 	struct sha256_double hash;
 
 	setup_locale();
@@ -300,6 +302,9 @@ int main(int argc, char *argv[])
 	opt_register_noarg("--option-static-remotekey", opt_set_bool,
 			   &option_static_remotekey,
 			   "Use option_static_remotekey generation rules");
+	opt_register_noarg("--option-anchor-outputs", opt_set_bool,
+			   &option_anchor_outputs,
+			   "Use option_anchor_outputs generation rules");
 	opt_register_version();
 
 	opt_parse(&argc, argv, opt_log_stderr_exit);
@@ -339,6 +344,10 @@ int main(int argc, char *argv[])
 	if (!amount_sat_sub_msat(&remote_msat, funding_amount, local_msat))
 		errx(1, "Can't afford local_msat");
 
+	if (option_anchor_outputs) {
+		printf("Using option-anchor-outputs\n");
+		option_static_remotekey = true;
+	}
 	if (option_static_remotekey)
 		printf("Using option-static-remotekey\n");
 
@@ -379,7 +388,11 @@ int main(int argc, char *argv[])
 			 &remote, &remoteseed,
 			 &remotebase, &funding_remotekey, commitnum);
 
+	/* FIXME: option for v2? */
+	derive_channel_id(&cid, &funding_txid, funding_outnum);
+
 	channel = new_full_channel(NULL,
+				   &cid,
 				   &funding_txid, funding_outnum, 1,
 				   funding_amount,
 				   local_msat,
@@ -389,6 +402,7 @@ int main(int argc, char *argv[])
 				   &localbase, &remotebase,
 				   &funding_localkey, &funding_remotekey,
 				   option_static_remotekey,
+				   option_anchor_outputs,
 				   fee_payer);
 
 	if (!channel_force_htlcs(channel,

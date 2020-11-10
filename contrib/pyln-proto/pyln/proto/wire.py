@@ -1,11 +1,10 @@
-from binascii import hexlify
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.ciphers.aead import ChaCha20Poly1305
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
-from cryptography.hazmat.primitives import serialization
+from .primitives import Secret, PrivateKey, PublicKey
 from hashlib import sha256
 import coincurve
 import os
@@ -57,64 +56,6 @@ def decryptWithAD(k, n, ad, ciphertext):
     return chacha.decrypt(n, ciphertext, ad)
 
 
-class PrivateKey(object):
-    def __init__(self, rawkey):
-        assert len(rawkey) == 32 and isinstance(rawkey, bytes)
-        self.rawkey = rawkey
-        rawkey = int(hexlify(rawkey), base=16)
-        self.key = ec.derive_private_key(rawkey, ec.SECP256K1(),
-                                         default_backend())
-
-    def serializeCompressed(self):
-        return self.key.private_bytes(serialization.Encoding.Raw,
-                                      serialization.PrivateFormat.Raw, None)
-
-    def public_key(self):
-        return PublicKey(self.key.public_key())
-
-
-class Secret(object):
-    def __init__(self, raw):
-        assert(len(raw) == 32)
-        self.raw = raw
-
-    def __str__(self):
-        return "Secret[0x{}]".format(hexlify(self.raw).decode('ASCII'))
-
-
-class PublicKey(object):
-    def __init__(self, innerkey):
-        # We accept either 33-bytes raw keys, or an EC PublicKey as returned
-        # by cryptography.io
-        if isinstance(innerkey, bytes):
-            innerkey = ec.EllipticCurvePublicKey.from_encoded_point(
-                ec.SECP256K1(), innerkey
-            )
-
-        elif not isinstance(innerkey, ec.EllipticCurvePublicKey):
-            raise ValueError(
-                "Key must either be bytes or ec.EllipticCurvePublicKey"
-            )
-        self.key = innerkey
-
-    def serializeCompressed(self):
-        raw = self.key.public_bytes(
-            serialization.Encoding.X962,
-            serialization.PublicFormat.CompressedPoint
-        )
-        return raw
-
-    def __str__(self):
-        return "PublicKey[0x{}]".format(
-            hexlify(self.serializeCompressed()).decode('ASCII')
-        )
-
-
-def Keypair(object):
-    def __init__(self, priv, pub):
-        self.priv, self.pub = priv, pub
-
-
 class Sha256Mixer(object):
     def __init__(self, base):
         self.hash = sha256(base).digest()
@@ -129,7 +70,7 @@ class Sha256Mixer(object):
         return self.hash
 
     def __str__(self):
-        return "Sha256Mixer[0x{}]".format(hexlify(self.hash).decode('ASCII'))
+        return "Sha256Mixer[0x{}]".format(self.hash.hex())
 
 
 class LightningConnection(object):
@@ -176,7 +117,7 @@ class LightningConnection(object):
         h.hash = self.handshake['h']
         h.update(self.handshake['e'].public_key().serializeCompressed())
         es = ecdh(self.handshake['e'], self.remote_pubkey)
-        t = hkdf(salt=self.chaining_key, ikm=es.raw, info=b'')
+        t = hkdf(salt=self.chaining_key, ikm=es.data, info=b'')
         assert(len(t) == 64)
         self.chaining_key, temp_k1 = t[:32], t[32:]
         c = encryptWithAD(temp_k1, self.nonce(0), h.digest(), b'')
@@ -196,7 +137,7 @@ class LightningConnection(object):
         h.update(re.serializeCompressed())
         es = ecdh(self.local_privkey, re)
         self.handshake['re'] = re
-        t = hkdf(salt=self.chaining_key, ikm=es.raw, info=b'')
+        t = hkdf(salt=self.chaining_key, ikm=es.data, info=b'')
         self.chaining_key, temp_k1 = t[:32], t[32:]
 
         try:
@@ -212,7 +153,7 @@ class LightningConnection(object):
         h.hash = self.handshake['h']
         h.update(self.handshake['e'].public_key().serializeCompressed())
         ee = ecdh(self.handshake['e'], self.handshake['re'])
-        t = hkdf(salt=self.chaining_key, ikm=ee.raw, info=b'')
+        t = hkdf(salt=self.chaining_key, ikm=ee.data, info=b'')
         assert(len(t) == 64)
         self.chaining_key, self.temp_k2 = t[:32], t[32:]
         c = encryptWithAD(self.temp_k2, self.nonce(0), h.digest(), b'')
@@ -233,7 +174,7 @@ class LightningConnection(object):
         h.update(re.serializeCompressed())
         ee = ecdh(self.handshake['e'], re)
         self.chaining_key, self.temp_k2 = hkdf_two_keys(
-            salt=self.chaining_key, ikm=ee.raw
+            salt=self.chaining_key, ikm=ee.data
         )
         try:
             decryptWithAD(self.temp_k2, self.nonce(0), h.digest(), c)
@@ -251,7 +192,7 @@ class LightningConnection(object):
         se = ecdh(self.local_privkey, self.re)
 
         self.chaining_key, self.temp_k3 = hkdf_two_keys(
-            salt=self.chaining_key, ikm=se.raw
+            salt=self.chaining_key, ikm=se.data
         )
         t = encryptWithAD(self.temp_k3, self.nonce(0), h.digest(), b'')
         m = b'\x00' + c + t
@@ -269,11 +210,12 @@ class LightningConnection(object):
             raise ValueError("Unsupported handshake version {}, only version "
                              "0 is supported.".format(v))
         rs = decryptWithAD(self.temp_k2, self.nonce(1), h.digest(), c)
+        self.remote_pubkey = PublicKey(rs)
         h.update(c)
-        se = ecdh(self.handshake['e'], PublicKey(rs))
+        se = ecdh(self.handshake['e'], self.remote_pubkey)
 
         self.chaining_key, self.temp_k3 = hkdf_two_keys(
-            se.raw, self.chaining_key
+            se.data, self.chaining_key
         )
         decryptWithAD(self.temp_k3, self.nonce(0), h.digest(), t)
         self.rn, self.sn = 0, 0

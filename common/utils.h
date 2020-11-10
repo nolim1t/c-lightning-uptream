@@ -47,9 +47,9 @@ void clear_softref_(const tal_t *outer, size_t outersize, void **ptr);
 /* Note: p is never a complex expression, otherwise this multi-evaluates! */
 #define tal_arr_expand(p, s)						\
 	do {								\
-		size_t n = tal_count(*(p));				\
-		tal_resize((p), n+1);					\
-		(*(p))[n] = (s);					\
+		size_t n_ = tal_count(*(p));				\
+		tal_resize((p), n_+1);					\
+		(*(p))[n_] = (s);					\
 	} while(0)
 
 /**
@@ -84,6 +84,12 @@ void setup_tmpctx(void);
 /* Free any children of tmpctx. */
 void clean_tmpctx(void);
 
+/* Call this before any libwally function which allocates. */
+void tal_wally_start(void);
+/* Then call this to reparent everything onto this parent (which must
+ * have been tal_steal() if it was allocated by libwally here) */
+void tal_wally_end(const tal_t *parent);
+
 /* Define sha256_eq. */
 STRUCTEQ_DEF(sha256, 0, u);
 
@@ -105,5 +111,8 @@ STRUCTEQ_DEF(ripemd160, 0, u);
 #else
 #define IFDEV(dev, nondev) (nondev)
 #endif
+
+/* Context which all wally allocations use (see common/setup.c) */
+extern const tal_t *wally_tal_ctx;
 
 #endif /* LIGHTNING_COMMON_UTILS_H */

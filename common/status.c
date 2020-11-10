@@ -7,8 +7,8 @@
 #include <ccan/tal/str/str.h>
 #include <common/daemon.h>
 #include <common/daemon_conn.h>
-#include <common/gen_status_wire.h>
 #include <common/status.h>
+#include <common/status_wiregen.h>
 #include <common/utils.h>
 #include <errno.h>
 #include <signal.h>
@@ -101,7 +101,7 @@ static void status_peer_io_short(enum log_level iodir,
 {
 	status_peer_debug(peer, "%s %s",
 			  iodir == LOG_IO_OUT ? "peer_out" : "peer_in",
-			  wire_type_name(fromwire_peektype(p)));
+			  peer_wire_name(fromwire_peektype(p)));
 }
 
 void status_peer_io(enum log_level iodir,

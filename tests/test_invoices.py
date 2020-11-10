@@ -1,6 +1,6 @@
 from fixtures import *  # noqa: F401,F403
 from fixtures import TEST_NETWORK
-from pyln.client import RpcError
+from pyln.client import RpcError, Millisatoshi
 from utils import only_one, DEVELOPER, wait_for, wait_channel_quiescent
 
 
@@ -57,6 +57,26 @@ def test_invoice(node_factory, chainparams):
     with pytest.raises(RpcError, match=r'msatoshi cannot exceed 4294967295msat'):
         l2.rpc.invoice(4294967295 + 1, 'inv3', '?')
     l2.rpc.invoice(4294967295, 'inv3', '?')
+
+
+def test_invoice_zeroval(node_factory):
+    """A zero value invoice is unpayable, did you mean 'any'?"""
+    l1 = node_factory.get_node()
+
+    with pytest.raises(RpcError, match=r"positive .*: invalid token '0'"):
+        l1.rpc.invoice(0, 'inv', '?')
+
+    with pytest.raises(RpcError, match=r"positive .*: invalid token .*0msat"):
+        l1.rpc.invoice('0msat', 'inv', '?')
+
+    with pytest.raises(RpcError, match=r"positive .*: invalid token .*0sat"):
+        l1.rpc.invoice('0sat', 'inv', '?')
+
+    with pytest.raises(RpcError, match=r"positive .*: invalid token .*0.00000000btc"):
+        l1.rpc.invoice('0.00000000btc', 'inv', '?')
+
+    with pytest.raises(RpcError, match=r"positive .*: invalid token .*0.00000000000btc"):
+        l1.rpc.invoice('0.00000000000btc', 'inv', '?')
 
 
 def test_invoice_weirdstring(node_factory):
@@ -152,7 +172,7 @@ def test_invoice_routeboost(node_factory, bitcoind):
     # Due to reserve & fees, l1 doesn't have capacity to pay this.
     inv = l2.rpc.invoice(msatoshi=2 * (10**8) - 123456, label="inv2", description="?")
     # Check warning
-    assert 'warning_capacity' in inv
+    assert 'warning_capacity' in inv or 'warning_mpp_capacity' in inv
     assert 'warning_offline' not in inv
     assert 'warning_deadends' not in inv
 
@@ -191,7 +211,7 @@ def test_invoice_routeboost_private(node_factory, bitcoind):
     # Attach public channel to l1 so it doesn't look like a dead-end.
     l0 = node_factory.get_node()
     l0.rpc.connect(l1.info['id'], 'localhost', l1.port)
-    scid_dummy = l0.fund_channel(l1, 2 * (10**5))
+    scid_dummy, _ = l0.fundchannel(l1, 2 * (10**5))
     bitcoind.generate_block(5)
 
     # Make sure channel is totally public.
@@ -213,7 +233,7 @@ def test_invoice_routeboost_private(node_factory, bitcoind):
 
     # If we explicitly say not to, it won't expose.
     inv = l2.rpc.invoice(msatoshi=123456, label="inv1", description="?", exposeprivatechannels=False)
-    assert 'warning_capacity' in inv
+    assert 'warning_capacity' in inv or 'warning_mpp_capacity' in inv
     assert 'warning_offline' not in inv
     assert 'warning_deadends' not in inv
     assert 'routes' not in l1.rpc.decodepay(inv['bolt11'])
@@ -247,7 +267,7 @@ def test_invoice_routeboost_private(node_factory, bitcoind):
     # The existence of a public channel, even without capacity, will suppress
     # the exposure of private channels.
     l3.rpc.connect(l2.info['id'], 'localhost', l2.port)
-    scid2 = l3.fund_channel(l2, (10**5))
+    scid2, _ = l3.fundchannel(l2, (10**5))
     bitcoind.generate_block(5)
 
     # Make sure channel is totally public.
@@ -286,7 +306,7 @@ def test_invoice_routeboost_private(node_factory, bitcoind):
     # Ask it explicitly to use a channel it can't (insufficient capacity)
     inv = l2.rpc.invoice(msatoshi=(10**5) * 1000 + 1, label="inv5", description="?", exposeprivatechannels=scid2)
     assert 'warning_deadends' not in inv
-    assert 'warning_capacity' in inv
+    assert 'warning_capacity' in inv or 'warning_mpp_capacity' in inv
     assert 'warning_offline' not in inv
 
     # Give it two options and it will pick one with suff capacity.
@@ -584,10 +604,33 @@ def test_decode_unknown(node_factory):
     assert b11['description'] == 'Payment request with multipart support'
     assert b11['expiry'] == 28800
     assert b11['payee'] == '02330d13587b67a85c0a36ea001c4dba14bcd48dda8988f7303275b040bffb6abd'
-    assert b11['min_final_cltv_expiry'] == 9
+    assert b11['min_final_cltv_expiry'] == 18
     extra = only_one(b11['extra'])
     assert extra['tag'] == 'v'
     assert extra['data'] == 'dp68gup69uhnzwfj9cejuvf3xshrwde68qcrswf0d46kcarfwpshyaplw3skw0tdw4k8g6tsv9e8g'
     assert b11['signature'] == '3045022100e2b2bc3204dc7416c8227d5db2ce65d24b35e22b8de8379c392b74a0c650a397022041db8304c7ff0ad25264167e23dcfce7744b3bff95b8dfda9579a38799ce8f5e'
     assert 'fallbacks' not in b11
     assert 'routes' not in b11
+
+
+def test_amountless_invoice(node_factory):
+    """The recipient should know how much was received by an amountless invoice.
+    """
+    l1, l2 = node_factory.line_graph(2)
+
+    inv = l2.rpc.invoice('any', 'lbl', 'desc')['bolt11']
+    i = l2.rpc.listinvoices()['invoices']
+    assert(len(i) == 1)
+    assert('msatoshi_received' not in i[0])
+    assert('amount_received_msat' not in i[0])
+    assert(i[0]['status'] == 'unpaid')
+    details = l1.rpc.decodepay(inv)
+    assert('msatoshi' not in details)
+
+    l1.rpc.pay(inv, msatoshi=1337)
+
+    i = l2.rpc.listinvoices()['invoices']
+    assert(len(i) == 1)
+    assert(i[0]['msatoshi_received'] == 1337)
+    assert(i[0]['amount_received_msat'] == Millisatoshi(1337))
+    assert(i[0]['status'] == 'paid')
