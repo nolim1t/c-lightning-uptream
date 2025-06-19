@@ -39,12 +39,12 @@ jobs:
         if [[ "${{ github.event.inputs.dist-location }}" != "" ]]; then
           DISTLOCATION=${{ github.event.inputs.dist-location }}
         elif [[ "${{ github.ref_type }}" == "tag" ]]; then
-          if [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+[0-9a-z]+$ ]]; then
-            DISTLOCATION="rc"
+          if [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+$ ]]; then
+            DISTLOCATION="major"
           elif [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             DISTLOCATION="minor"
-          elif [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+$ ]]; then
-            DISTLOCATION="major"
+          elif [[ "${{ github.ref_name }}" =~ ^v[0-9]+\.[0-9]+[0-9a-z]+$ ]]; then
+            DISTLOCATION="rc"
           else
             echo "Tag format not recognized"
             exit 1
